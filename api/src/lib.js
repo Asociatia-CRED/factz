@@ -1,6 +1,6 @@
 "use strict";
-/* Logica comună: baza de date (Cosmos DB), fișiere (Blob Storage), identitate și permisiuni. */
-const { CosmosClient } = require("@azure/cosmos");
+/* Logica comună: date (Azure Table Storage), fișiere (Blob Storage), identitate și permisiuni. */
+const { TableClient, odata } = require("@azure/data-tables");
 const { BlobServiceClient } = require("@azure/storage-blob");
 
 const COLS = ["categories", "articles", "users", "comments", "media", "subscribers", "polls", "views", "tags", "topics", "liveupdates", "reactions", "settings"];
@@ -9,61 +9,75 @@ const REACTS = ["fire", "wow", "clap", "think", "angry"];
 const DAY = 86400000;
 const ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
 
-/* ---------- Cosmos DB ---------- */
-let _container = null;
-async function container() {
-  if (_container) return _container;
-  const cs = process.env.COSMOS_CONNECTION_STRING;
-  if (!cs) throw httpError(500, "Lipsește setarea COSMOS_CONNECTION_STRING în Azure (Static Web App > Environment variables).", "config");
-  const client = new CosmosClient(cs);
-  const { database } = await client.databases.createIfNotExists({ id: process.env.COSMOS_DB || "spillthefacts" });
-  const { container } = await database.containers.createIfNotExists({ id: process.env.COSMOS_CONTAINER || "docs", partitionKey: { paths: ["/col"] } });
-  _container = container;
-  return _container;
+/* ---------- Azure Table Storage (în același Storage account cu pozele) ---------- */
+// Fiecare document e o entitate: PartitionKey = colecția, RowKey = id-ul.
+// Conținutul JSON e împărțit în bucăți (d0, d1, ...) pentru că o proprietate are maximum 64 KB.
+const CHUNK = 30000, MAX_CHUNKS = 15;
+let _table = null;
+async function table() {
+  if (_table) return _table;
+  const cs = process.env.STORAGE_CONNECTION_STRING;
+  if (!cs) throw httpError(500, "Lipsește setarea STORAGE_CONNECTION_STRING în Azure (Static Web App > Environment variables).", "config");
+  const t = TableClient.fromConnectionString(cs, process.env.STORAGE_TABLE || "factzdata", { allowInsecureConnection: /UseDevelopmentStorage|127\.0\.0\.1|localhost/.test(cs) });
+  try { await t.createTable(); } catch (e) { if (e.statusCode !== 409) throw e; }
+  _table = t;
+  return _table;
 }
-const itemId = (col, id) => `${col}|${id}`;
-
+function encode(col, id, data) {
+  const clean = { ...data }; delete clean.id;
+  const s = JSON.stringify(clean);
+  const n = Math.max(1, Math.ceil(s.length / CHUNK));
+  if (n > MAX_CHUNKS) throw httpError(413, "Documentul e prea mare (peste ~450.000 de caractere). Împarte articolul în mai multe părți.", "too_large");
+  const ent = { partitionKey: col, rowKey: id, n };
+  for (let i = 0; i < n; i++) ent["d" + i] = s.slice(i * CHUNK, (i + 1) * CHUNK);
+  return { ent, clean };
+}
+function decode(ent) {
+  let s = ""; for (let i = 0; i < (ent.n || 0); i++) s += ent["d" + i] || "";
+  try { return JSON.parse(s || "{}"); } catch { return {}; }
+}
+async function listEntities(filter) {
+  const t = await table(); const out = [];
+  for await (const e of t.listEntities(filter ? { queryOptions: { filter } } : undefined)) out.push(e);
+  return out;
+}
 async function readAll() {
-  const c = await container();
-  const { resources } = await c.items.query("SELECT c.col, c.docId, c.data FROM c").fetchAll();
   const out = Object.fromEntries(COLS.map(k => [k, {}]));
-  for (const r of resources) if (out[r.col]) out[r.col][r.docId] = r.data;
+  for (const e of await listEntities()) if (out[e.partitionKey]) out[e.partitionKey][e.rowKey] = decode(e);
   return out;
 }
 async function readCol(col) {
-  const c = await container();
-  const { resources } = await c.items.query({ query: "SELECT c.docId, c.data FROM c WHERE c.col = @col", parameters: [{ name: "@col", value: col }] }, { partitionKey: col }).fetchAll();
-  return Object.fromEntries(resources.map(r => [r.docId, r.data]));
+  const out = {};
+  for (const e of await listEntities(odata`PartitionKey eq ${col}`)) out[e.rowKey] = decode(e);
+  return out;
 }
-async function getDoc(col, id) {
-  const c = await container();
-  try { const { resource } = await c.item(itemId(col, id), col).read(); return resource ? resource.data : null; }
-  catch (e) { if (e.code === 404) return null; throw e; }
+async function getRaw(col, id) {
+  const t = await table();
+  try { return await t.getEntity(col, id); } catch (e) { if (e.statusCode === 404) return null; throw e; }
 }
+async function getDoc(col, id) { const e = await getRaw(col, id); return e ? decode(e) : null; }
 async function putDoc(col, id, data) {
-  const c = await container();
-  const clean = { ...data }; delete clean.id;
-  await c.items.upsert({ id: itemId(col, id), col, docId: id, data: clean });
+  const t = await table(); const { ent, clean } = encode(col, id, data);
+  await t.upsertEntity(ent, "Replace");
   return clean;
 }
 async function delDoc(col, id) {
-  const c = await container();
-  try { await c.item(itemId(col, id), col).delete(); } catch (e) { if (e.code !== 404) throw e; }
+  const t = await table();
+  try { await t.deleteEntity(col, id); } catch (e) { if (e.statusCode !== 404) throw e; }
 }
 /* citire-modificare-scriere cu verificare de versiune (pentru contoare: citiri, reacții, voturi) */
 async function mutate(col, id, fn) {
-  const c = await container();
-  for (let i = 0; i < 5; i++) {
-    let cur = null, etag = null;
-    try { const { resource } = await c.item(itemId(col, id), col).read(); if (resource) { cur = resource.data; etag = resource._etag; } }
-    catch (e) { if (e.code !== 404) throw e; }
-    const next = fn(cur ? JSON.parse(JSON.stringify(cur)) : null);
-    const item = { id: itemId(col, id), col, docId: id, data: next };
+  const t = await table();
+  for (let i = 0; i < 25; i++) {
+    if (i) await new Promise(r => setTimeout(r, Math.min(400, 15 * 2 ** Math.min(i, 5)) * (0.5 + Math.random())));
+    const raw = await getRaw(col, id);
+    const next = fn(raw ? decode(raw) : null);
+    const { ent } = encode(col, id, next);
     try {
-      if (etag) await c.item(itemId(col, id), col).replace(item, { accessCondition: { type: "IfMatch", condition: etag } });
-      else await c.items.create(item);
+      if (raw) await t.updateEntity(ent, "Replace", { etag: raw.etag });
+      else await t.createEntity(ent);
       return next;
-    } catch (e) { if (e.code === 412 || e.code === 409) continue; throw e; }
+    } catch (e) { if (e.statusCode === 412 || e.statusCode === 409) continue; throw e; }
   }
   throw httpError(503, "Prea multe modificări simultane. Încearcă din nou.", "unavailable");
 }
@@ -109,4 +123,4 @@ function deepMerge(base, patch) {
   return out;
 }
 
-module.exports = { COLS, RANK, REACTS, DAY, ID_RE, container, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };
+module.exports = { COLS, RANK, REACTS, DAY, ID_RE, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };

@@ -1,12 +1,14 @@
 {
-  "name": "spillthefacts-api",
+  "name": "factz-api",
   "version": "1.0.0",
   "private": true,
   "description": "API pentru factz.ro (Azure Static Web Apps, Azure Functions v4)",
   "main": "src/functions/*.js",
-  "scripts": { "start": "func start" },
+  "scripts": {
+    "start": "func start"
+  },
   "dependencies": {
-    "@azure/cosmos": "^4.1.1",
+    "@azure/data-tables": "^13.3.2",
     "@azure/functions": "^4.5.1",
     "@azure/storage-blob": "^12.24.0"
   }
