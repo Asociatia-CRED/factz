@@ -1,0 +1,13 @@
+{
+  "platform": { "apiRuntime": "node:20" },
+  "routes": [
+    { "route": "/.auth/login/twitter", "statusCode": 404 },
+    { "route": "/api/*", "methods": ["GET", "POST"], "allowedRoles": ["anonymous", "authenticated"] }
+  ],
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+  },
+  "mimeTypes": { ".json": "application/json" }
+}
