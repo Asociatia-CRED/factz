@@ -11,7 +11,7 @@ app.http("upload", {
   methods: ["POST"], authLevel: "anonymous", route: "upload",
   handler: async (req, context) => {
     try {
-      const me = L.findMember(L.principal(req), await L.readCol("users"));
+      const me = await L.resolveMember(L.principal(req), await L.readCol("users"));
       if (L.rank(me) < 1) throw L.httpError(403, "Doar redacția poate încărca fișiere.", "forbidden");
       const type = String(req.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
       const ext = TYPES[type];

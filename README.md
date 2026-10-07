@@ -95,9 +95,11 @@ Azure adaugă singur un fișier de publicare în GitHub și construiește site-u
 3. Apasă **Intră cu Microsoft** (sau GitHub) și autentifică-te.
 4. Scrie-ți numele. Bifează **Încarcă și conținutul demo** dacă vrei să vezi site-ul plin, apoi apasă **Creează contul de administrator**.
 
+> **Dacă după autentificare apare „Nu ai acces încă”** (Azure îți arată uneori adresa mascată, de forma „aso*****”): pe pagina respectivă apare un **cod de acces**. Copiază-l, apoi în Azure, la Static Web App > Settings > Environment variables, adaugă setarea `ADMIN_USER_IDS` cu acest cod și reîncarcă pagina. Contul tău de administrator se leagă permanent de acel cod.
+
 ## Pasul 8. Adaugă redacția
 
-În studio, la **Utilizatori > Adaugă utilizator**, completează pentru fiecare membru adresa exactă a contului Microsoft cu care va intra, sau numele de utilizator GitHub. Alege rolul:
+În studio, la **Utilizatori > Adaugă utilizator**, completează pentru fiecare membru adresa exactă a contului Microsoft cu care va intra, sau numele de utilizator GitHub. Dacă persoana vede „Nu ai acces încă”, pagina îi afișează un **cod de acces**: pune codul în locul adresei. După prima intrare reușită, contul rămâne legat de persoană. Alege rolul:
 
 - **Jurnalist:** scrie articole și le trimite spre revizuire.
 - **Editor:** aprobă, publică, moderează comentarii, gestionează dosare și sondaje.
@@ -124,6 +126,33 @@ Persoana intră apoi la `factz.ro/#/cn-studio` cu acel cont. Adresa studioului s
 
 Schimbările de domeniu pot dura până la 72 de ore. Certificatul SSL (https) e creat automat și gratuit.
 
+## Asistentul AI de redacție
+
+Asistentul citește o dată pe oră (8–23) sursele RSS alese în **Studio > Asistent AI**, alege subiectele importante, scrie ciorne cu cuvinte proprii cu modelul `factz-writer` din Azure și le trimite în studio ca **„În revizuire”**. **Nu publică nimic singur.** Fiecare ciornă are o listă de lucruri de verificat și linkuri spre surse, iar după publicare Fișa de încredere menționează transparent că prima variantă a fost pregătită cu AI.
+
+### Configurare (o singură dată)
+
+1. **Urcă fișierele noi pe GitHub** (conținutul arhivei, ca de obicei). Arhiva conține folderele `automation` și `github-workflow`.
+2. **Activează programarea orară.** Pe GitHub, în depozit: **Add file > Create new file**. La nume scrie exact `.github/workflows/asistent.yml` (cu punct la început și cu slash-uri). Deschide pe calculator fișierul `github-workflow/asistent.yml` din arhivă, copiază tot conținutul, lipește-l pe GitHub și apasă **Commit changes**.
+3. **Generează cheia asistentului.** În **Studio > Asistent AI**, la „Cheia asistentului”, apasă **Generează**, apoi **Copiază**.
+4. **Pune cheia în Azure.** Static Web App > Settings > Environment variables > Add: `AGENT_TOKEN` = cheia copiată. Apply.
+5. **Pune setările în GitHub.** În depozit: **Settings > Secrets and variables > Actions**.
+   - Tabul **Secrets** > **New repository secret**:
+     - `AGENT_TOKEN` = aceeași cheie de la pasul 3
+     - `AI_KEY` = cheia modelului din Foundry (ai.azure.com > Models > `factz-writer` > Details > Key)
+   - Tabul **Variables** > **New repository variable**:
+     - `SITE_URL` = adresa site-ului, de exemplu `https://proud-water-01a47bd0f.6.azurestaticapps.net` (sau `https://factz.ro` după legarea domeniului)
+     - `AI_ENDPOINT` = `https://asociatiacred-1798-resource.services.ai.azure.com/openai/v1`
+     - `AI_DEPLOYMENT` = `factz-writer`
+6. **Prima rulare, manual.** GitHub > tabul **Actions** > **Asistent factz** > **Run workflow**. După 1–2 minute, vezi rezultatul în **Studio > Asistent AI > Ultimele rulări**, iar ciornele în lista „Ciorne care așteaptă verificarea”.
+
+### Bine de știut
+- **Costuri:** aproximativ 2 cenți pe ciornă. Limita zilnică se setează din studio (implicit 10 pe zi, 2 pe rulare).
+- **Sursele care nu merg** apar cu roșu în „Ultimele rulări”. Corectează adresa sau scoate sursa din listă.
+- **Oprire temporară:** debifează „Asistent pornit” în studio.
+- **GitHub oprește programările** în depozitele publice fără activitate timp de 60 de zile. Dacă se întâmplă, le reactivezi din tabul Actions.
+- **Cheia AI și AGENT_TOKEN sunt secrete.** Nu le pune niciodată în fișiere, doar în Secrets și Environment variables.
+
 ## Cum faci actualizări
 
 Orice fișier schimbat în GitHub se publică automat în 2–4 minute. Când primești o versiune nouă a site-ului, în depozit deschide `index.html`, apoi meniul cu trei puncte, **Delete file**, apoi încarcă noul fișier cu **Add file > Upload files**.
@@ -134,7 +163,7 @@ Orice fișier schimbat în GitHub se publică automat în 2–4 minute. Când pr
 |---|---|
 | Site-ul se încarcă, dar e gol și nu poți configura studioul | Lipsește setarea `STORAGE_CONNECTION_STRING` de la pasul 6, sau a fost copiată greșit. |
 | La încărcarea unei poze apare o eroare | Verifică bifa de acces anonim de la pasul 4 (Storage account > Settings > Configuration). |
-| „Nu ai acces încă” după autentificare | Adresa contului nu e adăugată exact la fel în Studio > Utilizatori. |
+| „Nu ai acces încă” după autentificare | Folosește codul de acces afișat pe pagină: în Studio > Utilizatori în locul adresei, sau, pentru administrator, în setarea `ADMIN_USER_IDS` din Azure. |
 | Site-ul nu se actualizează după o modificare în GitHub | Verifică tabul **Actions**. Dacă un pas e roșu, deschide-l și trimite mesajul de eroare. |
 
 ## Bine de știut

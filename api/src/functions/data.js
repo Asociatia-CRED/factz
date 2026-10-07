@@ -9,7 +9,7 @@ app.http("data", {
     try {
       const all = await L.readAll();
       const p = L.principal(req);
-      const me = L.findMember(p, all.users);
+      const me = await L.resolveMember(p, all.users);
       const r = L.rank(me);
       const data = { ...all };
       // articole: publicul vede doar ce e publicat; jurnaliștii văd și ciornele proprii; editorii văd tot
@@ -17,15 +17,15 @@ app.http("data", {
       // comentarii: publicul vede doar ce e aprobat
       if (r < 2) data.comments = Object.fromEntries(Object.entries(all.comments).filter(([, c]) => c.status === "approved"));
       // date private
-      if (r < 2) data.subscribers = {};
+      if (r < 2) { data.subscribers = {}; data.agent = {}; }
       if (r < 1) data.media = {};
-      if (r < 3) data.users = Object.fromEntries(Object.entries(all.users).map(([id, u]) => [id, { ...u, email: me && me.id === id ? u.email : undefined }]));
+      data.users = Object.fromEntries(Object.entries(all.users).map(([id, u]) => [id, r >= 3 ? { ...u, authIds: undefined, linked: !!(u.authIds || []).length } : { ...u, email: me && me.id === id ? u.email : undefined, authIds: undefined }]));
       const mc = L.mediaContainer();
       return L.json(200, {
         data,
         mediaBase: mc ? mc.url : "",
         bootstrapNeeded: Object.keys(all.users).length === 0,
-        me: { principal: p ? { userDetails: p.userDetails, identityProvider: p.identityProvider } : null, user: me },
+        me: { principal: p ? { userDetails: p.userDetails, identityProvider: p.identityProvider, userId: p.userId } : null, user: me ? { ...me, authIds: undefined } : null },
       });
     } catch (e) { return L.fail(e, context); }
   },

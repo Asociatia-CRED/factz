@@ -3,7 +3,7 @@
 const { TableClient, odata } = require("@azure/data-tables");
 const { BlobServiceClient } = require("@azure/storage-blob");
 
-const COLS = ["categories", "articles", "users", "comments", "media", "subscribers", "polls", "views", "tags", "topics", "liveupdates", "reactions", "settings"];
+const COLS = ["categories", "articles", "users", "comments", "media", "subscribers", "polls", "views", "tags", "topics", "liveupdates", "reactions", "settings", "agent"];
 const RANK = { jurnalist: 1, editor: 2, admin: 3 };
 const REACTS = ["fire", "wow", "clap", "think", "angry"];
 const DAY = 86400000;
@@ -95,13 +95,42 @@ function principal(req) {
   if (!h) return null;
   try { const p = JSON.parse(Buffer.from(h, "base64").toString("utf8")); return p && p.userDetails ? p : null; } catch { return null; }
 }
+const authKey = p => `${p.identityProvider || "x"}:${p.userId || ""}`;
+const isMasked = s => /\*/.test(String(s || ""));
+// Găsește membrul redacției pentru utilizatorul logat. Azure trimite uneori adresa mascată („aso*****”),
+// așa că fiecare cont e legat permanent de codul unic Azure (userId) la prima potrivire.
 function findMember(p, users) {
   if (!p) return null;
-  const key = String(p.userDetails).toLowerCase();
-  for (const [id, u] of Object.entries(users)) {
-    if (u && u.active !== false && String(u.email || "").toLowerCase() === key) return { ...u, id };
+  const key = authKey(p), mail = String(p.userDetails || "").toLowerCase();
+  const act = Object.entries(users).filter(([, u]) => u && u.active !== false);
+  let hit = act.find(([, u]) => (u.authIds || []).includes(key));
+  if (!hit && p.userId) hit = act.find(([, u]) => String(u.email || "").trim() === p.userId);
+  if (!hit && mail && !isMasked(mail)) hit = act.find(([, u]) => String(u.email || "").toLowerCase().trim() === mail);
+  return hit ? { ...hit[1], id: hit[0] } : null;
+}
+async function resolveMember(p, users) {
+  if (!p) return null;
+  let m = findMember(p, users);
+  const key = authKey(p);
+  // recuperare: codurile din setarea ADMIN_USER_IDS devin administrator (leagă primul admin încă nelegat)
+  if (!m && p.userId) {
+    const allowed = String(process.env.ADMIN_USER_IDS || "").split(/[\s,;]+/).filter(Boolean);
+    if (allowed.includes(p.userId)) {
+      const admins = Object.entries(users).filter(([, u]) => u && u.active !== false && u.role === "admin");
+      const free = admins.find(([, u]) => !(u.authIds || []).length) || admins[0];
+      if (free) m = { ...free[1], id: free[0] };
+      else { const id = "u" + Date.now().toString(36); m = { name: "Administrator", email: "", role: "admin", active: true, bio: "", createdAt: Date.now(), id }; }
+    }
   }
-  return null;
+  if (m && p.userId && !(m.authIds || []).includes(key)) {
+    const doc = { ...m, authIds: [...(m.authIds || []), key].slice(-5) };
+    if ((!doc.email || isMasked(doc.email) || doc.email === p.userId) && !isMasked(p.userDetails)) doc.email = p.userDetails;
+    const id = doc.id; delete doc.id;
+    await putDoc("users", id, doc);
+    users[id] = doc;
+    m = { ...doc, id };
+  }
+  return m;
 }
 const rank = u => (u && RANK[u.role]) || 0;
 
@@ -123,4 +152,4 @@ function deepMerge(base, patch) {
   return out;
 }
 
-module.exports = { COLS, RANK, REACTS, DAY, ID_RE, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };
+module.exports = { COLS, RANK, REACTS, DAY, ID_RE, authKey, isMasked, resolveMember, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };

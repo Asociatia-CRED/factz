@@ -5,7 +5,7 @@ const L = require("../lib");
 const seed = require("../seed.json");
 
 // rangul minim pentru scriere (1 jurnalist, 2 editor, 3 administrator)
-const NEED = { articles: 1, liveupdates: 1, media: 1, tags: 1, topics: 2, categories: 2, comments: 2, polls: 2, subscribers: 2, views: 2, reactions: 2, users: 3, settings: 3 };
+const NEED = { agent: 2, articles: 1, liveupdates: 1, media: 1, tags: 1, topics: 2, categories: 2, comments: 2, polls: 2, subscribers: 2, views: 2, reactions: 2, users: 3, settings: 3 };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function shiftSeed(src) {
@@ -37,7 +37,7 @@ app.http("write", {
       const { op } = body;
       const p = L.principal(req);
       const users = await L.readCol("users");
-      const me = L.findMember(p, users);
+      const me = await L.resolveMember(p, users);
       const r = L.rank(me);
       const now = Date.now();
       const id = String(body.id || "");
@@ -86,7 +86,7 @@ app.http("write", {
         if (Object.keys(users).length) throw L.httpError(403, "Studioul are deja administrator.", "forbidden");
         const name = String(body.name || "").trim().slice(0, 80) || p.userDetails;
         const uid = "u" + now.toString(36);
-        await L.putDoc("users", uid, { name, email: p.userDetails, role: "admin", active: true, bio: "", createdAt: now });
+        await L.putDoc("users", uid, { name, email: L.isMasked(p.userDetails) ? "" : p.userDetails, authIds: p.userId ? [L.authKey(p)] : [], role: "admin", active: true, bio: "", createdAt: now });
         if (body.demo) {
           const s = shiftSeed(seed);
           const jobs = [];
@@ -156,6 +156,8 @@ app.http("write", {
         if (!["admin", "editor", "jurnalist"].includes(next.role)) throw L.httpError(400, "Rol invalid.", "invalid");
         if (id === me.id && (next.role !== "admin" || next.active === false)) throw L.httpError(400, "Nu îți poți scoate singur drepturile de administrator.", "invalid");
         next.email = String(next.email || "").trim();
+        if (existing && existing.authIds) next.authIds = existing.authIds; else delete next.authIds;
+        delete next.linked;
       }
       if (col === "users" && op === "delete" && id === me.id) throw L.httpError(400, "Nu îți poți șterge propriul cont.", "invalid");
 

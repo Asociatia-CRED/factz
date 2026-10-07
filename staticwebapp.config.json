@@ -1,13 +1,38 @@
 {
-  "platform": { "apiRuntime": "node:20" },
+  "platform": {
+    "apiRuntime": "node:20"
+  },
   "routes": [
-    { "route": "/.auth/login/twitter", "statusCode": 404 },
-    { "route": "/api/*", "methods": ["GET", "POST"], "allowedRoles": ["anonymous", "authenticated"] }
+    {
+      "route": "/automation/*",
+      "statusCode": 404
+    },
+    {
+      "route": "/github-workflow/*",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/twitter",
+      "statusCode": 404
+    },
+    {
+      "route": "/api/*",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "allowedRoles": [
+        "anonymous",
+        "authenticated"
+      ]
+    }
   ],
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
   },
-  "mimeTypes": { ".json": "application/json" }
+  "mimeTypes": {
+    ".json": "application/json"
+  }
 }
