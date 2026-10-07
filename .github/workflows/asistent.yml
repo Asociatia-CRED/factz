@@ -1,0 +1,25 @@
+name: Asistent factz
+
+on:
+  schedule:
+    # în fiecare oră, între 08:17 și 23:17 ora României (ora de vară)
+    - cron: "17 5-20 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ruleaza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pregătește ciornele
+        run: node automation/asistent.mjs
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          AI_ENDPOINT: ${{ vars.AI_ENDPOINT }}
+          AI_DEPLOYMENT: ${{ vars.AI_DEPLOYMENT }}
+          AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          AI_KEY: ${{ secrets.AI_KEY }}
