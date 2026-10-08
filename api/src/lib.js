@@ -112,10 +112,16 @@ async function resolveMember(p, users) {
   if (!p) return null;
   let m = findMember(p, users);
   const key = authKey(p);
+  const allowed = String(process.env.ADMIN_USER_IDS || "").split(/[\s,;]+/).filter(Boolean);
+  const isOwner = !!p.userId && allowed.includes(p.userId);
+  // codurile din ADMIN_USER_IDS sunt mereu administratori
+  if (m && isOwner && m.role !== "admin") {
+    const doc = { ...m, role: "admin" }; const id = doc.id; delete doc.id;
+    await putDoc("users", id, doc); users[id] = doc; m = { ...doc, id };
+  }
   // recuperare: codurile din setarea ADMIN_USER_IDS devin administrator (leagă primul admin încă nelegat)
   if (!m && p.userId) {
-    const allowed = String(process.env.ADMIN_USER_IDS || "").split(/[\s,;]+/).filter(Boolean);
-    if (allowed.includes(p.userId)) {
+    if (isOwner) {
       const admins = Object.entries(users).filter(([, u]) => u && u.active !== false && u.role === "admin");
       const free = admins.find(([, u]) => !(u.authIds || []).length) || admins[0];
       if (free) m = { ...free[1], id: free[0] };

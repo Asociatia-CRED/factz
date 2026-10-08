@@ -147,7 +147,8 @@ Asistentul citește o dată pe oră (8–23) sursele RSS alese în **Studio > As
 6. **Prima rulare, manual.** GitHub > tabul **Actions** > **Asistent factz** > **Run workflow**. După 1–2 minute, vezi rezultatul în **Studio > Asistent AI > Ultimele rulări**, iar ciornele în lista „Ciorne care așteaptă verificarea”.
 
 ### Bine de știut
-- **Costuri:** aproximativ 2 cenți pe ciornă. Limita zilnică se setează din studio (implicit 10 pe zi, 2 pe rulare).
+- **Costuri:** aproximativ 5–7 cenți pe ciornă (4 etape: alegere, analiza surselor, scriere, verificare). Limita zilnică se setează din studio (implicit 10 pe zi, 2 pe rulare).
+- **Tipuri de ciorne:** „știre” (cel puțin 2 publicații și 2 surse originale), „declarație” (totul vine dintr-o singură sursă; text scurt, clar atribuit) și „rezumat de investigație” (material exclusiv al unei publicații; trimite cititorul la sursă). Problemele găsite (contradicții între surse, informații neconfirmate) apar cu roșu în editor, la „De rezolvat înainte de publicare”.
 - **Sursele care nu merg** apar cu roșu în „Ultimele rulări”. Corectează adresa sau scoate sursa din listă.
 - **Oprire temporară:** debifează „Asistent pornit” în studio.
 - **GitHub oprește programările** în depozitele publice fără activitate timp de 60 de zile. Dacă se întâmplă, le reactivezi din tabul Actions.

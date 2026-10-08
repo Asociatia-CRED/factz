@@ -25,10 +25,17 @@ const DEFAULTS = {
 };
 const AGENT_USER = "u_agent";
 const slug = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
-function okToken(req) {
-  const want = process.env.AGENT_TOKEN || "", got = req.headers.get("x-agent-token") || "";
-  if (want.length < 24 || got.length !== want.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(want), Buffer.from(got));
+const fp = s => crypto.createHash("sha256").update(s).digest("hex").slice(0, 6);
+// Verifică cheia și explică exact ce nu merge (fără să dezvăluie cheia; „amprenta” e doar un fragment de hash).
+function tokenProblem(req) {
+  const want = String(process.env.AGENT_TOKEN || "").trim();
+  const got = String(req.headers.get("x-agent-token") || "").trim();
+  if (!want) return "Azure nu are setarea AGENT_TOKEN (Static Web App > Settings > Environment variables, mediul Production). Adaug-o și apasă Apply.";
+  if (want.length < 24) return `Setarea AGENT_TOKEN din Azure e prea scurtă (${want.length} caractere). Generează o cheie nouă din studio.`;
+  if (!got) return "Cererea nu conține nicio cheie: secretul AGENT_TOKEN din GitHub e gol sau lipsește.";
+  if (got.length !== want.length || !crypto.timingSafeEqual(Buffer.from(want), Buffer.from(got)))
+    return `Cheile diferă. Azure are amprenta ${fp(want)} (${want.length} caractere), GitHub a trimis amprenta ${fp(got)} (${got.length} caractere). Pune aceeași cheie în ambele locuri.`;
+  return null;
 }
 const today = () => L.dayKey(Date.now());
 const clip = (s, n) => String(s || "").trim().slice(0, n);
@@ -43,7 +50,8 @@ app.http("agent", {
   methods: ["GET", "POST"], authLevel: "anonymous", route: "agent",
   handler: async (req, context) => {
     try {
-      if (!okToken(req)) throw L.httpError(401, "Cheia asistentului lipsește sau e greșită (setarea AGENT_TOKEN).", "forbidden");
+      const problem = tokenProblem(req);
+      if (problem) throw L.httpError(401, problem, "forbidden");
       const config = { ...DEFAULTS, ...(await L.getDoc("agent", "config") || {}) };
       if (req.method === "GET") {
         const state = await L.getDoc("agent", "state") || { seen: {}, days: {} };
@@ -97,7 +105,8 @@ app.http("agent", {
           title, slug: (slug(title) || "stire") + "-" + crypto.randomBytes(2).toString("hex"), dek: clip(d.dek, 400), body: body2,
           tldr: (d.tldr || []).map(t => clip(t, 200)).filter(Boolean).slice(0, 3), categoryId, topicId: "", tags: tagIds,
           authorId: AGENT_USER, status: "review", format: "text", breaking: false, featured: false, liveEnded: false,
-          sources, aiDraft: true, aiChecklist: (d.checklist || []).map(t => clip(t, 200)).slice(0, 8),
+          sources, aiDraft: true, aiChecklist: (d.checklist || []).map(t => clip(t, 200)).slice(0, 10),
+          aiFlags: (d.flags || []).map(t => clip(t, 300)).slice(0, 8), aiKind: ["stire", "declaratie", "investigatie"].includes(d.kind) ? d.kind : "stire", aiOutlets: Math.max(0, Math.min(20, +d.outlets || 0)),
           seoTitle: "", seoDesc: "", seoImageId: "", coverId: "", coverAlt: "", coverCaption: "", videoId: "",
           revisions: [], readMin: Math.max(1, Math.round(words / 200)), createdAt: now, updatedAt: now,
         };
