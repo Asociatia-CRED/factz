@@ -62,6 +62,8 @@ async function ai(instructions, input, schema, maxTokens, effort = "medium") {
   return JSON.parse(txt);
 }
 const S = (type, extra = {}) => ({ type, ...extra });
+// diacriticele vechi cu sedilă (ş, ţ) devin cele corecte, cu virgulă (ș, ț), inclusiv în citate
+const roFix = v => typeof v === "string" ? v.replace(/ş/g, "ș").replace(/Ş/g, "Ș").replace(/ţ/g, "ț").replace(/Ţ/g, "Ț") : Array.isArray(v) ? v.map(roFix) : v;
 const obj = props => ({ type: "object", additionalProperties: false, required: Object.keys(props), properties: props });
 const arr = items => ({ type: "array", items });
 
@@ -192,8 +194,9 @@ Primești titluri recente, fiecare cu publicația din care vine. Sarcina ta:
    Exemplu: „Guvernul a aprobat bugetul” (HotNews) și „Bolojan: bugetul trece azi prin ședință” (G4Media) = același eveniment.
 2. ALEGE subiecte de interes public (politică, economie, societate, educație, sănătate, externe, tehnologie, mediu, justiție).
 3. PREFERĂ categoric subiectele relatate de CEL PUȚIN DOUĂ PUBLICAȚII DIFERITE. Mai multe articole din aceeași publicație NU înseamnă mai multe surse.
-4. EVITĂ: vedete și bârfe, accidente și fapte diverse fără interes public, horoscop, sport minor, conținut sponsorizat, opinii, subiecte din lista „deja acoperite”.
-5. Într-un grup pune doar articole despre exact același eveniment, nu despre teme înrudite.
+4. PRIORITATE pentru un cititor tânăr din România: întâi subiectele cu impact direct în România sau în UE (decizii, legi, bani publici, educație, sănătate, muncă, prețuri, mediu, justiție); apoi externele majore. Nu alege mai mult de un subiect despre aceeași persoană (de ex. același politician străin) într-o rulare.
+5. EVITĂ: vedete și bârfe, accidente și fapte diverse fără interes public, horoscop, sport minor, conținut sponsorizat, opinii, subiecte din lista „deja acoperite”, știri al căror miez e doar o glumă, o laudă sau o replică a cuiva („X l-a numit pe Y...”).
+6. Într-un grup pune doar articole despre exact același eveniment, nu despre teme înrudite.
 Folosește doar ID-urile primite.`;
 const ANALYZE = `Ești redactorul de verificare al factz.ro. Primești articole-sursă numerotate (cu publicația fiecăruia).
 Stabilește, strict pe baza textelor:
@@ -216,20 +219,22 @@ REGULI DE FOND (obligatorii):
 REGULI DE FORMĂ:
 5. TITLUL (max. 110 caractere) e precis și atribuie corect: o declarație e a persoanei, nu a instituției.
    Bine: „Secretarul de stat Cristian Bușoi: facturile la curent ar putea crește cu 20–22% în iarnă”. Rău: „Ministerul Energiei estimează scumpiri”.
+   Titlul spune FAPTUL PRINCIPAL, nu cea mai colorată replică. Bine: „Navi Pillay, fosta șefă a comisiei ONU pentru Gaza, a câștigat Premiul Nobel pentru Pace”. Rău: „Navi Pillay a glumit că ar putea împărți premiul cu Trump”. Bine: „Trump le-a acordat lui Musk, Huang, Brin și Lisa Su Medalia Națională a Științei”. Rău: „Trump l-a numit pe Musk «comoară națională»”.
 6. PRIMA FRAZĂ spune evenimentul (cine, ce, când), NU începe cu „Potrivit…”.
    Bine: „Bulgaria cere consultări cu România și Turcia după ce două nave au fost lovite de drone în largul coastelor sale.”
 7. Atribuie sursa o singură dată pentru un set de informații, apoi scrie natural. Nu pune „potrivit X” în fiecare frază și nu înlănțui atribuiri („a declarat la X, potrivit Y”): numește direct sursa originală.
-8. Fiecare paragraf aduce informație NOUĂ. Ideile din „tldr” nu se repetă cuvânt cu cuvânt în corp.
+8. Fiecare paragraf aduce informație NOUĂ. „dek” (rezumatul de sub titlu), „tldr” și primul paragraf NU spun același lucru de trei ori: dek-ul dă contextul sau miza într-o frază; tldr dă 3 fapte distincte, formulate scurt; corpul le dezvoltă cu alte cuvinte și cu detalii în plus.
 9. STRUCTURA corpului, în HTML (<p>, <h2>, <ul><li>, <blockquote>):
    - 1–2 paragrafe cu evenimentul și detaliile principale;
    - 1–3 paragrafe cu cifre, declarații, detalii;
    - dacă există context în surse: <h2>Context</h2> + 1–2 paragrafe (cu atribuire);
-   - dacă sursele permit: <h2>Ce urmează</h2> sau <h2>Ce înseamnă pentru tine</h2> + 1 paragraf.
+   - DOAR dacă sursele dau un pas concret următor (o dată, un vot, o decizie anunțată): <h2>Ce urmează</h2>; sau, doar dacă sursele arată un efect concret asupra cititorului: <h2>Ce înseamnă pentru tine</h2>. Fără secțiuni de umplutură de tipul „rămâne de clarificat”.
    Calcule simple sunt permise doar cu cifrele din surse și doar dacă sunt corecte, marcate „(calcul factz.ro)”.
 10. LUNGIMEA depinde de tip: „stire” 5–8 paragrafe; „declaratie” 2–4 paragrafe, titlul de forma „Persoana: esența declarației”;
     „investigatie” 2–3 paragrafe, prima frază spune clar că e o investigație a publicației X, ultima îndeamnă la citirea materialului complet; nu reproduce detaliile exclusive.
-11. EVITĂ: „în contextul în care”, „este important de menționat”, „nu în ultimul rând”, „a mai precizat că” repetat, „sursa citată”, adjective emoționale, clickbait.
-12. „tldr”: exact 3 idei scurte (max. 140 de caractere fiecare), fiecare înțeleasă singură.
+11. EVITĂ: „în contextul în care”, „este important de menționat”, „nu în ultimul rând”, „a mai precizat că” repetat, „sursa citată”, adjective emoționale sau evaluative („înfocat”, „generos”, „șocant”, „uriaș”), clickbait.
+   Contextul (fundalul) vine NUMAI din textele surselor. Nu adăuga din ce știi tu despre persoane sau evenimente anterioare.
+12. „tldr”: exact 3 idei scurte, fiecare de cel mult 140 de caractere (numără!) și o singură propoziție, înțeleasă singură.
 13. „checklist”: tot ce editorul trebuie să verifice în surse: TOATE numele și funcțiile oficialilor, toate cifrele, toate condițiile și estimările, orice detaliu din „uncertain”.
 14. Alege categoria doar din lista primită.
 15. „photo_queries”: 2–3 căutări scurte pentru o fotografie de copertă cu licență liberă: întâi numele exact al persoanei principale sau al instituției/locului (de ex. „Ilie Bolojan”, „Palatul Parlamentului”), apoi o căutare generică în engleză pentru temă (de ex. „hospital corridor”, „euro banknotes”).`;
@@ -238,6 +243,11 @@ const VERIFY = `Ești editorul de verificare al factz.ro. Primești o ciornă ș
 - Verifică titlul: e precis, atribuie corect, nu generalizează?
 - Elimină repetițiile și formulările vagi. Păstrează structura și stilul.
 - Dacă descoperi că sursele descriu evenimente diferite amestecate, păstrează doar evenimentul principal.
+- Caută CONTRADICȚII în ciornă sau între surse (de ex. „intenționează să-l sune” și „l-a sunat deja”): corectează după surse sau, dacă nu se poate decide, păstrează ambele variante atribuite și pune problema în „issues”.
+- Șterge orice context, fundal sau adjectiv evaluativ care nu apare în surse (inclusiv „cunoștințe generale” despre persoane).
+- Dacă titlul pune în față o replică, o glumă sau o laudă în locul faptului principal, rescrie-l ca să spună faptul.
+- Dacă dek-ul, tldr și primul paragraf repetă aceleași fraze, reformulează ca fiecare să aducă ceva diferit. Fiecare idee din tldr: cel mult 140 de caractere.
+- Elimină secțiunile „Ce urmează”/„Ce înseamnă pentru tine” care nu conțin nimic concret din surse.
 Întoarce versiunea CORECTATĂ completă (title, dek, tldr, body, checklist).
 În "issues" pune DOAR problemele care rămân și pe care editorul trebuie să le rezolve el (contradicții între surse, informații neconfirmate, nesiguranțe). Listă goală dacă ciorna e curată.`;
 
@@ -253,6 +263,10 @@ const verifySchema = obj({ ...draftProps, issues: arr(S("string")) });
 
 /* ---------- rularea ---------- */
 async function main() {
+  if (process.env.GITHUB_EVENT_NAME === "schedule") {
+    const h = +new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Bucharest", hour: "2-digit", hourCycle: "h23" }).format(new Date());
+    if (h < 8 || h > 23) { log(`E ora ${h} în România; asistentul rulează între 8 și 23.`); return; }
+  }
   const cfg = await site("GET");
   const { config } = cfg;
   if (!config.enabled) { log("Asistentul e oprit din studio."); return site("POST", { action: "log", found: 0, created: 0, note: "Oprit din studio" }); }
@@ -322,6 +336,9 @@ async function main() {
       const plain = s => String(s || "").replace(/<[^>]+>/g, "").trim().length;
       const verifiedOk = plain(v.body) >= 250 && plain(v.body) >= plain(d.body) * 0.4;
       if (!verifiedOk) (v.issues = v.issues || []).push("Verificarea automată a scurtat prea mult textul; s-a păstrat varianta inițială. Citește-o cu atenție.");
+      // ideile „Pe scurt” prea lungi nu se mai taie la jumătate de frază: se marchează pentru editor
+      const longTldr = (v.tldr && v.tldr.length ? v.tldr : d.tldr).filter(t => String(t).length > 180);
+      if (longTldr.length) (v.issues = v.issues || []).push("Una dintre ideile „Pe scurt” e prea lungă; scurteaz-o înainte de publicare.");
       const draft = {
         title: v.title || d.title, dek: v.dek || d.dek, tldr: (v.tldr && v.tldr.length ? v.tldr : d.tldr), body: verifiedOk ? v.body : d.body,
         checklist: [...new Set([...(v.checklist || []), ...(d.checklist || [])])].slice(0, 10),
@@ -337,6 +354,7 @@ async function main() {
           else log("Nicio fotografie potrivită; ciorna rămâne cu coperta generată.");
         } catch (e) { errors.push(`Fotografie pentru „${draft.title.slice(0, 50)}”: ${e.message}`); log("EROARE fotografie:", e.message); }
       }
+      for (const k of ["title", "dek", "tldr", "body", "checklist", "flags"]) draft[k] = roFix(draft[k]);
       const r = await site("POST", { action: "draft", draft });
       titles.push(`${draft.title} [${kind}, ${outlets.size} publicații]`); log("Ciornă creată:", draft.title, `(${kind}, ${outlets.size} publicații)`, r.id);
       await site("POST", { action: "seen", keys: t.group.map(i => hash(i.link)) });

@@ -2,8 +2,9 @@ name: Asistent factz
 
 on:
   schedule:
-    # în fiecare oră, între 08:17 și 23:17 ora României (ora de vară)
-    - cron: "17 5-20 * * *"
+    # în fiecare oră, între 08:17 și 23:17 ora României, vara și iarna
+    # (GitHub folosește ora UTC; scriptul sare peste orele din afara intervalului)
+    - cron: "17 5-21 * * *"
   workflow_dispatch: {}
 
 jobs:

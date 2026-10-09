@@ -15,7 +15,7 @@ function agentOk(req) {
   const want = String(process.env.AGENT_TOKEN || "").trim(), got = String(req.headers.get("x-agent-token") || "").trim();
   return want.length >= 24 && got.length === want.length && crypto.timingSafeEqual(Buffer.from(want), Buffer.from(got));
 }
-const redirect = s => ({ status: 302, headers: { location: `/#/newsletter?s=${s}`, "cache-control": "no-store" } });
+const redirect = s => ({ status: 302, headers: { location: `/newsletter?s=${s}`, "cache-control": "no-store" } });
 async function settingsSite() { return (await L.getDoc("settings", "site")) || {}; }
 function mediaBase() { const mc = L.mediaContainer(); return mc ? mc.url : ""; }
 
@@ -55,7 +55,7 @@ app.http("newsletter", {
         if (body.action === "preview") return L.json(200, { subject: issue.subject, html: issue.html.split("%%UNSUB%%").join("#"), count: issue.count });
         const to = String(body.email || "").trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) throw L.httpError(400, "Scrie o adresă de e-mail validă pentru test.", "invalid");
-        const res = await N.send(to, { ...issue, subject: "[Test] " + issue.subject }, `${N.SITE()}/#/newsletter`, { wait: true });
+        const res = await N.send(to, { ...issue, subject: "[Test] " + issue.subject }, `${N.SITE()}/newsletter`, { wait: true, replyTo: (await settingsSite()).contactEmail });
         return L.json(200, { ok: true, count: issue.count, status: res.status, error: res.error || "", from: process.env.NEWSLETTER_FROM || "DoNotReply@factz.ro" });
       }
 
@@ -107,7 +107,7 @@ app.http("newsletter", {
           try {
             if (!sub.token) sub.token = N.newToken();
             if (kind === "confirm") { await N.send(sub.email, N.confirmEmail(sub)); confirms++; }
-            else { await N.send(sub.email, issue, N.unsubUrl(sub)); sent++; }
+            else { await N.send(sub.email, issue, N.unsubUrl(sub), { replyTo: site.contactEmail }); sent++; }
             const { id, ...doc } = sub;
             await L.putDoc("subscribers", id, kind === "confirm" ? { ...doc, status: doc.status || "pending", confirmSentAt: now } : { ...doc, lastNl: today });
           } catch (e) {

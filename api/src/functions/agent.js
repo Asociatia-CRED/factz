@@ -60,6 +60,8 @@ async function savePhoto(ph, now) {
   return { coverId: name, coverAlt: alt, coverCaption: credit, coverSourceUrl: sourceUrl, coverLicenseUrl: httpsUrl(ph.licenseUrl), aiPhoto: true };
 }
 const clip = (s, n) => String(s || "").trim().slice(0, n);
+// taie doar dacă e nevoie și niciodată în mijlocul unui cuvânt
+const clipWords = (s, n) => { const t = String(s || "").trim(); if (t.length <= n) return t; const cut = t.slice(0, n); return cut.slice(0, Math.max(cut.lastIndexOf(" "), n - 30)).replace(/[\s,;:–-]+$/, "") + "…"; };
 function cleanBody(html) {
   // doar etichetele permise; restul e eliminat (pagina mai face o sanitizare la afișare)
   return String(html || "").replace(/<(script|style|iframe)[\s\S]*?<\/\1>/gi, "")
@@ -124,7 +126,7 @@ app.http("agent", {
         const id = "ai" + now.toString(36) + crypto.randomBytes(2).toString("hex");
         const art = {
           title, slug: (slug(title) || "stire") + "-" + crypto.randomBytes(2).toString("hex"), dek: clip(d.dek, 400), body: body2,
-          tldr: (d.tldr || []).map(t => clip(t, 200)).filter(Boolean).slice(0, 3), categoryId, topicId: "", tags: tagIds,
+          tldr: (d.tldr || []).map(t => clipWords(t, 240)).filter(Boolean).slice(0, 3), categoryId, topicId: "", tags: tagIds,
           authorId: AGENT_USER, status: "review", format: "text", breaking: false, featured: false, liveEnded: false,
           sources, aiDraft: true, aiChecklist: (d.checklist || []).map(t => clip(t, 200)).slice(0, 10),
           aiFlags: (d.flags || []).map(t => clip(t, 300)).slice(0, 8), aiKind: ["stire", "declaratie", "investigatie"].includes(d.kind) ? d.kind : "stire", aiOutlets: Math.max(0, Math.min(20, +d.outlets || 0)),

@@ -46,7 +46,7 @@ function buildIssue(all, mediaBase, now, opts = {}) {
   const arts = pickArticles(all, now, opts);
   if (!arts.length) return null;
   const site = SITE(), cats = all.categories || {};
-  const url = a => `${site}/#/articol/${encodeURIComponent(a.slug || "")}`;
+  const url = a => `${site}/articol/${encodeURIComponent(a.slug || "")}`;
   const coverUrl = a => !a.coverId ? "" : /^https:\/\//.test(a.coverId) ? a.coverId : (mediaBase ? `${mediaBase.replace(/\/+$/, "")}/${a.coverId}` : "");
   const date = cap(DATE_RO.format(new Date(now)));
   const top = arts[0];
@@ -123,13 +123,14 @@ function client() {
 const unsubUrl = sub => `${SITE()}/api/newsletter?a=unsub&id=${encodeURIComponent(sub.id)}&t=${encodeURIComponent(sub.token || "")}`;
 // Trimite un e-mail. Nu așteaptă livrarea: Azure îl pune la coadă și îl livrează în câteva secunde.
 // Cu { wait: true } așteaptă (cel mult 25 de secunde) rezultatul real de la Azure: livrat sau eroarea exactă.
-async function send(to, { subject, html, text }, unsub, { wait = false } = {}) {
+async function send(to, { subject, html, text }, unsub, { wait = false, replyTo = "" } = {}) {
   const message = {
     senderAddress: FROM(),
     content: { subject, html: unsub ? html.split(UNSUB).join(esc(unsub)) : html, plainText: unsub ? text.split(UNSUB).join(unsub) : text },
     recipients: { to: [{ address: to }] },
     disableUserEngagementTracking: true,
   };
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(replyTo || "")) message.replyTo = [{ address: replyTo }];
   if (unsub) message.headers = { "List-Unsubscribe": `<${unsub}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
   try {
     const poller = await client().beginSend(message);

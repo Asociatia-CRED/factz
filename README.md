@@ -15,9 +15,9 @@ Durează în total cam o oră, din care o bună parte e așteptare.
 
 ## Pasul 1. Pune fișierele pe GitHub
 
-1. Fă-ți cont gratuit pe [github.com](https://github.com) (sau intră în contul tău).
+1. Intră pe [github.com](https://github.com) cu contul organizației Asociatia-CRED.
 2. Sus-dreapta, apasă **+** și apoi **New repository**.
-3. La *Repository name* scrie `spill-the-facts`. Poți alege **Private**. Apasă **Create repository**.
+3. La *Repository name* scrie `factz` (organizația Asociatia-CRED). Depozitul actual e public. Apasă **Create repository**.
 4. Pe pagina care apare, apasă linkul **uploading an existing file**.
 5. Dezarhivează arhiva primită și trage **conținutul** folderului (nu folderul însuși) în fereastra GitHub: `index.html`, `staticwebapp.config.json`, `README.md` și folderul `api`.
 6. Jos, apasă **Commit changes**.
@@ -35,7 +35,7 @@ Durează în total cam o oră, din care o bună parte e așteptare.
 În [portal.azure.com](https://portal.azure.com):
 
 1. Caută **Resource groups**, apoi **Create**.
-2. Nume: `spillthefacts`. Regiune: **West Europe**. Apoi **Review + create** și **Create**.
+2. Nume: `factz`. Regiune: **Austria East**. Apoi **Review + create** și **Create**.
 
 Toate resursele de mai jos le pui în acest grup.
 
@@ -47,7 +47,7 @@ Un singur Storage account ține tot: articolele și restul datelor (în **Table 
 2. Completează:
    - *Resource group:* `factz`
    - *Storage account name:* de exemplu `factzmedia` (doar litere mici și cifre, unic)
-   - *Region:* **West Europe** (sau altă regiune din Europa)
+   - *Region:* **Austria East** (sau altă regiune din UE)
    - *Primary service:* **Azure Blob Storage or Azure Data Lake Storage Gen 2**
    - *Performance:* Standard
    - *Redundancy:* **Locally-redundant storage (LRS)**
@@ -63,10 +63,10 @@ Nu trebuie să creezi tabele sau foldere. Site-ul le creează singur la prima po
 
 1. Caută **Static Web Apps**, apoi **Create**.
 2. Completează:
-   - *Resource group:* `spillthefacts`
-   - *Name:* `spillthefacts`
+   - *Resource group:* `factz`
+   - *Name:* `factz`
    - *Plan type:* **Free**
-   - *Source:* **GitHub**. Autentifică-te și alege depozitul `spill-the-facts`, ramura `main`.
+   - *Source:* **GitHub**. Autentifică-te și alege depozitul `factz` (organizația Asociatia-CRED), ramura `main`.
    - *Build Presets:* **Custom**
    - *App location:* `/`
    - *Api location:* `api`
@@ -113,7 +113,7 @@ Persoana intră apoi la `factz.ro/#/cn-studio` cu acel cont. Adresa studioului s
 
 ### Varianta recomandată: DNS în Azure
 
-1. În portal, caută **DNS zones**, apoi **Create**. Resource group `spillthefacts`, nume `factz.ro`.
+1. În portal, caută **DNS zones**, apoi **Create**. Resource group `factz`, nume `factz.ro`.
 2. Deschide zona creată și notează cele 4 adrese de la **Name servers** (de forma `ns1-xx.azure-dns.com`).
 3. În contul **Hostico**, la domeniul `factz.ro`, înlocuiește nameserverele cu cele 4 de la Azure.
 4. În Static Web App, la **Custom domains > Add > Custom domain on Azure DNS**, alege `factz.ro`. Azure creează singur înregistrările și certificatul SSL.
@@ -190,3 +190,15 @@ Din studio, la **Abonați**: previzualizare, e-mail de test, oprire/pornire și 
 ## Fotografii propuse de asistent
 
 Asistentul caută fotografii cu licență liberă (CC0, domeniu public, CC BY, CC BY-SA) pe Wikimedia Commons și Openverse și propune una doar dacă arată sigur subiectul. Creditul (autor, sursă, licență) apare sub fotografie, cu link spre sursă, și în Fișa de încredere. Fotografiile din articolele-sursă nu se folosesc niciodată. Se oprește din Studio > Asistent AI.
+
+## Adrese de pagină (din versiunea 8)
+
+Paginile au adrese reale, bune pentru Google: `factz.ro/articol/...`, `factz.ro/categorie/...`. Linkurile vechi de forma `factz.ro/#/articol/...` duc automat la adresa nouă. Studioul e la `factz.ro/cn-studio` (sau adresa aleasă în Setări). Harta site-ului pentru Google e la `factz.ro/api/sitemap` și e indicată în `robots.txt`; se poate trimite și din Google Search Console.
+
+## Carusel Instagram
+
+În editorul fiecărui articol salvat, butonul **Carusel Instagram** generează imagini 1080×1350 (copertă, ideile „Pe scurt”, surse) și textul postării. Imaginile se creează în browser, fără cost.
+
+## Aplicație pe telefon
+
+Cititorii pot adăuga factz.ro pe ecranul telefonului (Safari: Partajează > Adaugă pe ecranul principal; Chrome: Instalează aplicația). Iconițele sunt `icon-*.png` și `apple-touch-icon.png`, descrise în `manifest.webmanifest`.
