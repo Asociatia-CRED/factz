@@ -1645,12 +1645,12 @@ function pageStatic(key) {
     termeni: ["Termeni și condiții", `<p>Folosind factz.ro, ești de acord cu acești termeni. Conținutul editorial aparține factz.ro și poate fi citat cu menționarea sursei și link către articol.</p><h2>Comentarii</h2><p>Comentariile sunt moderate. Nu publicăm mesaje care conțin insulte, discriminare, date personale ale altora, spam sau îndemnuri la violență.</p><h2>Răspundere</h2><p>Depunem toate eforturile ca informațiile să fie corecte și actuale. Dacă observi o eroare, te rugăm să ne scrii.</p>`],
     confidentialitate: ["Confidențialitate", `<p>factz.ro este un proiect editorial al Asociației Centrul pentru Reformă, Echitate și Democrație (C.R.E.D.), care este și operatorul datelor tale. Colectăm cât mai puține date și doar pentru lucrurile descrise mai jos.</p>
       <h2>Ce stocăm</h2><ul>
-      <li><b>Comentarii:</b> numele și textul pe care le trimiți. Apar pe site doar după aprobarea redacției. Poți cere oricând ștergerea lor.</li>
+      <li><b>Comentarii:</b> numele și textul pe care le trimiți. Un model AI (Microsoft Azure, în UE) le verifică automat, ca să oprească spamul și jignirile, iar redacția decide ce se publică. Poți cere oricând ștergerea lor.</li>
       <li><b>Newsletter:</b> adresa ta de e-mail. Abonarea se confirmă printr-un link primit pe e-mail; dacă nu o confirmi, adresa se șterge după 30 de zile. Te poți dezabona cu un singur clic din orice newsletter, iar adresa se șterge definitiv. Nu urmărim dacă deschizi e-mailurile sau pe ce linkuri apeși.</li>
       <li><b>Citiri și reacții:</b> numărăm de câte ori e citit un articol și câte reacții primește, fără să știm cine le-a făcut.</li>
       <li><b>Protecție anti-spam:</b> ca să oprim mesajele automate, păstrăm temporar o amprentă criptată a conexiunii tale (nu adresa IP în clar), care se șterge automat.</li></ul>
       <h2>Unde sunt datele</h2><p>Datele sunt stocate în Uniunea Europeană, pe serviciile Microsoft Azure (Austria). E-mailurile pleacă prin Azure Communication Services, cu date păstrate în Europa. Traficul site-ului trece prin Cloudflare, care îl livrează rapid și îl protejează de atacuri.</p>
-      <h2>Inteligența artificială</h2><p>Redacția folosește un asistent AI (Microsoft Azure, în Uniunea Europeană) care pregătește primele variante ale unor știri pe baza articolelor publicate de alte redacții. Fiecare articol e verificat și aprobat de un editor înainte de publicare, iar Fișa de încredere arată când s-a folosit asistentul. Datele cititorilor (comentarii, adrese de e-mail) nu sunt trimise asistentului.</p>
+      <h2>Inteligența artificială</h2><p>Redacția folosește un asistent AI (Microsoft Azure, în Uniunea Europeană) care pregătește primele variante ale unor știri pe baza articolelor publicate de alte redacții. Fiecare articol e verificat și aprobat de un editor înainte de publicare, iar Fișa de încredere arată când s-a folosit asistentul. Adresele de e-mail ale cititorilor nu sunt trimise niciodată unui model AI; comentariile sunt verificate automat doar pentru spam și jigniri.</p>
       <h2>Ce nu facem</h2><p>Nu vindem și nu închiriem date, nu folosim reclame personalizate și nu te urmărim pe alte site-uri.</p>
       <h2>Drepturile tale</h2><p>Poți cere oricând acces la datele tale, corectarea sau ștergerea lor, scriindu-ne la <a href="mailto:${esc(mail)}">${esc(mail)}</a>. Răspundem în cel mult 30 de zile. Dacă ești nemulțumit, poți depune o plângere la Autoritatea Națională de Supraveghere a Prelucrării Datelor cu Caracter Personal (ANSPDCP, dataprotection.ro).</p>`],
     cookies: ["Cookie-uri și stocare locală", `<p>factz.ro nu folosește cookie-uri de urmărire sau de publicitate.</p><p>Folosim stocarea locală a browserului tău doar pentru lucruri care îți fac viața mai ușoară: tema luminoasă sau întunecată, articolele salvate, voturile din sondaje, reacțiile tale și interesele alese în „Pentru tine”. Aceste date rămân pe dispozitivul tău și le poți șterge din setările browserului.</p><p>Cloudflare, care livrează și protejează site-ul, poate folosi cookie-uri strict necesare pentru securitate (de exemplu, ca să deosebească vizitatorii reali de roboți). Membrii redacției care intră în studio primesc un cookie de autentificare de la Microsoft Azure.</p>`],
@@ -2090,7 +2090,7 @@ function pageDash() {
   const q = (list, sub) => list.length ? `<ul class="queue">${list.map(a => `<li><div><a href="${ST()}/editor/${esc(a.id)}">${esc(a.title || "Fără titlu")}</a><div class="sub">${sub(a)}</div></div>${pill(a.status)}</li>`).join("")}</ul>` : "";
   const hour = new Date().getHours();
   const greet = hour < 11 ? "Bună dimineața" : hour < 18 ? "Bună ziua" : "Bună seara";
-  return adminShell("dash", `${greet}, ${u.name.split(" ")[0]}`, esc(fmtLong(Date.now())), `<a class="btn brand" href="${ST()}/editor/nou">${I.plus} Articol nou</a>`, `
+  return adminShell("dash", `${greet}, ${u.name.split(" ")[0]}`, esc(fmtLong(Date.now())), `<button class="btn sec" data-act="week-carousel">Carusel: Săptămâna în 5 minute</button><a class="btn brand" href="${ST()}/editor/nou">${I.plus} Articol nou</a>`, `
     ${Store.mode === "local" ? `<div class="notice">Datele se salvează doar în acest browser. În pagina publicată, redacția și cititorii împart aceeași bază de date.</div>` : ""}
     <div class="stats">
       <div class="stat hl"><div class="n">${fmtNum(vToday)}</div><div class="l">Vizualizări azi</div></div>${arts.filter(isLiveNow).length ? `<div class="stat"><div class="n" style="color:var(--live-text)">${arts.filter(isLiveNow).length}</div><div class="l">Transmisii live acum</div></div>` : ""}
@@ -2338,19 +2338,40 @@ async function liveAdd() {
   const ok = await act(() => Store.set("liveupdates", newId("l"), { articleId: ED.a.id, text: text.slice(0, 2000), key: $("#lu-key").checked, by: me().id, createdAt: Date.now() }), "Actualizare publicată");
   if (ok) { ta.value = ""; $("#lu-key").checked = false; await act(() => Store.update("articles", ED.a.id, { updatedAt: Date.now() })); const l = $("#lu-list"); if (l) l.innerHTML = liveAdminList(ED.a); }
 }
+// Pozele se micșorează (cel mult 2000 px pe latura mare) și se comprimă înainte de urcare,
+// ca site-ul să se încarce repede pe date mobile. WebP unde browserul știe, altfel JPEG (sau PNG dacă poza are transparență).
+async function optimizeImage(f) {
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(f.type || "")) return f;
+  let bmp; try { bmp = await createImageBitmap(f); } catch (e) { return f; }
+  const MAX = 2000, scale = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const heic = /heic|heif/i.test(f.type);
+  if (scale === 1 && f.size < 350 * 1024 && !heic) return f; // deja mică
+  const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h; const ctx = cv.getContext("2d"); ctx.drawImage(bmp, 0, 0, w, h);
+  let alpha = false;
+  if (/png|webp/i.test(f.type)) { const d = ctx.getImageData(0, 0, w, h).data; for (let i = 3; i < d.length; i += 16) if (d[i] < 250) { alpha = true; break; } }
+  const toBlob = (t, q) => new Promise(r => cv.toBlob(r, t, q));
+  let b = await toBlob("image/webp", 0.82);
+  if (!b || b.type !== "image/webp") b = alpha ? await toBlob("image/png") : await toBlob("image/jpeg", 0.85);
+  if (!b || (!heic && b.size >= f.size)) return f; // fără câștig: păstrăm originalul
+  const ext = b.type === "image/webp" ? "webp" : b.type === "image/png" ? "png" : "jpg";
+  return new File([b], String(f.name || "imagine").replace(/\.[^.]+$/, "") + "." + ext, { type: b.type });
+}
+const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
 async function uploadFiles(files) {
   if (!CAP.assets) { toast("Încărcarea fișierelor necesită drept de editare pe acest site.", true); return []; }
-  const out = [];
-  for (const f of files) {
+  const out = []; let saved = 0;
+  for (const f0 of files) {
     const res = await act(async () => {
+      const f = await optimizeImage(f0); if (f !== f0) saved += Math.max(0, f0.size - f.size);
       const r = await CAP.assets.upload(f);
       const kind = r.contentType.startsWith("video/") ? "video" : r.contentType.startsWith("image/") ? "image" : "file";
-      const m = { assetId: r.id, name: f.name, kind, type: r.contentType, size: r.sizeBytes, folder: "General", alt: "", createdAt: Date.now(), by: (me() || {}).id || "" };
+      const m = { assetId: r.id, name: f0.name, kind, type: r.contentType, size: r.sizeBytes, folder: "General", alt: "", createdAt: Date.now(), by: (me() || {}).id || "" };
       const id = newId("m"); await Store.set("media", id, m); return { ...m, id };
     });
     if (res && res !== true) out.push(res);
   }
-  if (out.length) toast(out.length === 1 ? "Fișier încărcat" : `${out.length} fișiere încărcate`);
+  if (out.length) toast((out.length === 1 ? "Fișier încărcat" : `${out.length} fișiere încărcate`) + (saved > 50 * 1024 ? `. Pozele au fost optimizate: cu ${fmtSize(saved)} mai puțin de descărcat pentru cititori.` : ""));
   return out;
 }
 function mediaPicker(kind, onPick) {
@@ -2472,12 +2493,15 @@ function catEdit(id) {
 function pageComments(q) {
   const st = q.get("st") || "pending";
   const all = Store.list("comments");
-  const list = all.filter(c => c.status === st).sort((a, b) => b.createdAt - a.createdAt);
+  const rankAi = c => ({ check: 0, abuse: 1, spam: 2, ok: 3 })[(c.aiMod || {}).verdict] ?? 0;
+  const list = all.filter(c => c.status === st).sort((a, b) => st === "pending" ? rankAi(a) - rankAi(b) || b.createdAt - a.createdAt : b.createdAt - a.createdAt);
   const n = s => all.filter(c => c.status === s).length;
-  return adminShell("cmts", "Comentarii", "Comentariile apar pe site doar după aprobare", "", `
+  const flagged = list.filter(c => c.status === "pending" && /spam|abuse/.test((c.aiMod || {}).verdict || "")), auto = !!settings().cmtAutoApprove;
+  const aiBadge = c => { const m = c.aiMod; if (!m) return ""; const L = { ok: ["st-published", "AI: în regulă"], check: ["st-review", "AI: de verificat"], spam: ["st-off", "AI: spam"], abuse: ["st-off", "AI: jignitor"] }[m.verdict]; return L ? ` <span class="pill ${L[0]}" title="${esc(m.reason || "")}">${L[1]}</span>${m.verdict !== "ok" && m.reason ? `<div class="hint" style="color:${m.verdict === "check" ? "var(--warn, #B45309)" : "var(--danger)"}">${esc(m.reason)}</div>` : ""}` : ""; };
+  return adminShell("cmts", "Comentarii", auto ? "Comentariile marcate „în regulă” de AI se publică singure; restul așteaptă aprobarea ta" : "Comentariile apar pe site doar după aprobare. AI-ul le marchează ca să știi unde să te uiți întâi", isAdmin(me()) && Store.mode === "api" ? `<button class="btn ${auto ? "sec" : "ghost"} sm wrap-btn" data-act="cmt-auto">${auto ? "Oprește aprobarea automată" : "Aprobă automat comentariile „în regulă”"}</button>` : "", `
     <div class="tabs"><a href="${ST()}/comentarii" class="${st === "pending" ? "on" : ""}">De moderat<span class="c">${n("pending")}</span></a><a href="${ST()}/comentarii?st=approved" class="${st === "approved" ? "on" : ""}">Aprobate<span class="c">${n("approved")}</span></a></div>
-    ${st === "pending" && list.length > 1 ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px"><button class="btn ok sm" data-act="cmt-all-ok">Aprobă toate (${list.length})</button><button class="btn ghost sm" style="color:var(--danger)" data-act="cmt-all-del">Șterge toate (${list.length})</button></div>` : ""}
-    ${list.length ? list.map(c => { const a = Store.get("articles", c.articleId); return `<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><strong>${esc(c.name)}</strong> <span class="muted small">${esc(relTime(c.createdAt))}</span><div class="hint">la ${a ? `<a href="/articol/${esc(a.slug)}" style="color:var(--brand)">${esc(a.title)}</a>` : "un articol șters"}</div></div>
+    ${st === "pending" && (list.length > 1 || flagged.length) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px">${list.length > 1 ? `<button class="btn ok sm" data-act="cmt-all-ok">Aprobă toate (${list.length})</button>` : ""}${flagged.length ? `<button class="btn ghost sm" style="color:var(--danger)" data-act="cmt-flag-del">Șterge spam și jigniri (${flagged.length})</button>` : ""}${list.length > 1 ? `<button class="btn ghost sm" style="color:var(--danger)" data-act="cmt-all-del">Șterge toate (${list.length})</button>` : ""}</div>` : ""}
+    ${list.length ? list.map(c => { const a = Store.get("articles", c.articleId); return `<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><strong>${esc(c.name)}</strong> <span class="muted small">${esc(relTime(c.createdAt))}</span>${aiBadge(c)}<div class="hint">la ${a ? `<a href="/articol/${esc(a.slug)}" style="color:var(--brand)">${esc(a.title)}</a>` : "un articol șters"}</div></div>
       <div style="display:flex;gap:6px">${c.status === "pending" ? `<button class="btn ok sm" data-act="cmt-ok" data-id="${esc(c.id)}">Aprobă</button>` : `<button class="btn sec sm" data-act="cmt-hide" data-id="${esc(c.id)}">Ascunde</button>`}<button class="btn ghost sm" style="color:var(--danger)" data-act="cmt-del" data-id="${esc(c.id)}">Șterge</button></div></div>
       <p style="margin:12px 0 0;white-space:pre-wrap">${esc(c.text)}</p></div>`; }).join("")
       : `<div class="empty"><h3>${st === "pending" ? "Niciun comentariu de moderat" : "Niciun comentariu aprobat"}</h3><p>${st === "pending" ? "Comentariile noi ale cititorilor apar aici." : "Comentariile aprobate apar aici."}</p></div>`}`);
@@ -2522,13 +2546,14 @@ function pageSubs() {
   const stLabel = s => s.status === "active" ? `<span class="pill st-published">Confirmat</span>` : `<span class="pill st-review">Așteaptă confirmarea</span>`;
   const nlCard = Store.mode !== "api" ? `<div class="notice" style="margin-bottom:18px">Newsletterul se trimite doar de pe site-ul publicat.</div>` : `
     <div class="card" style="margin-bottom:18px"><div class="card-h"><h2>Newsletterul de dimineață</h2>${off ? `<span class="pill st-off">Oprit</span>` : `<span class="pill st-published">Pornit</span>`}</div>
-      <p class="small muted" style="margin:0 0 10px">Pleacă în fiecare zi la 7, cu știrile publicate în ultimele 24 de ore, doar către abonații care au confirmat adresa. Dacă nu s-a publicat nimic, nu se trimite.</p>
+      <p class="small muted" style="margin:0 0 10px">Pleacă în fiecare zi la 7, cu știrile publicate în ultimele 24 de ore, doar către abonații care au confirmat adresa. Dacă nu s-a publicat nimic, nu se trimite. ${settings().newsletterWeeklyOff ? "" : "Duminica pleacă „Săptămâna în 5 minute”, cu cele mai importante știri ale săptămânii."}</p>
       <p style="margin:0 0 14px">${st ? `Ultima trimitere: ${esc(fmtDateTime(st.at))}. ${st.empty ? "Nu s-a trimis, pentru că nu existau știri noi." : `${st.sent} ${st.sent === 1 ? "e-mail trimis" : "e-mailuri trimise"}${st.subject ? `, cu subiectul „${esc(st.subject)}”` : ""}.`}${st.confirms ? ` Plus ${st.confirms} ${st.confirms === 1 ? "e-mail" : "e-mailuri"} de confirmare.` : ""}${(st.errors || []).length ? ` <span style="color:var(--danger)">${st.errors.length} erori.</span>` : ""}` : "Nu a plecat încă niciun newsletter."}</p>
       ${st && (st.errors || []).length ? `<ul class="small" style="margin:0 0 14px;color:var(--danger)">${st.errors.slice(-5).map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
-        <button class="btn sec" data-act="nl-preview">Previzualizează</button>
+        <button class="btn sec" data-act="nl-preview" data-weekly="0">Previzualizează ediția zilnică</button>
+        <button class="btn sec" data-act="nl-preview" data-weekly="1">Previzualizează ediția de duminică</button>
         <form data-form="nl-test" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div class="field" style="margin:0"><label for="nl-test">Trimite un test la</label><input id="nl-test" name="email" type="email" class="input" required value="${esc((u && u.email && !/\*/.test(u.email)) ? u.email : "")}" placeholder="adresa ta"></div><button class="btn">Trimite testul</button></form>
-        ${isAdmin(u) ? `<button class="btn ghost" data-act="nl-toggle">${off ? "Pornește newsletterul" : "Oprește newsletterul"}</button>` : ""}
+        ${isAdmin(u) ? `<button class="btn ghost" data-act="nl-toggle">${off ? "Pornește newsletterul" : "Oprește newsletterul"}</button><button class="btn ghost wrap-btn" data-act="nl-weekly">${settings().newsletterWeeklyOff ? "Pornește ediția de duminică" : "Oprește ediția de duminică"}</button>` : ""}
       </div></div>`;
   return adminShell("subs", "Abonați newsletter", `${active.length} ${active.length === 1 ? "abonat confirmat" : "abonați confirmați"}${list.length > active.length ? `, ${list.length - active.length} în așteptare` : ""}, ${week} noi în ultimele 7 zile`, CAP.downloads && list.length ? `<button class="btn sec" data-act="subs-export">Descarcă lista (CSV)</button>` : "", `
     ${nlCard}
@@ -2815,6 +2840,90 @@ function pushSettingsCard() {
     : `<p class="small" style="margin:0 0 12px">Ca să pornești alertele: 1) apasă „Generează cheile”; 2) în Azure, la Static Web App > Environment variables, adaugă cele două chei cu exact aceste nume și apasă Apply; 3) după un minut, dă refresh aici.</p>`}
     <div data-push-keys style="margin-top:12px"></div>
     <button type="button" class="btn ${PUSH_KEY ? "ghost" : "sec"} sm wrap-btn" data-act="push-keys">${PUSH_KEY ? "Generează chei noi (alertele existente se opresc)" : "Generează cheile"}</button></div>`;
+}
+
+/* ================= „Săptămâna în 5 minute” — carusel ================= */
+function weekPick(now = Date.now(), max = 6) {
+  const days = new Set(Array.from({ length: 7 }, (_, i) => dayKey(now - i * 86400000)));
+  const score = a => { const v = Store.get("views", a.id) || {}; const wk = Object.entries(v.days || {}).filter(([d]) => days.has(d)).reduce((s, [, n]) => s + (+n || 0), 0); return wk + (a.breaking ? 400 : 0) + (a.featured ? 250 : 0) + (a.format === "opinie" ? -200 : 0); };
+  return liveArts().filter(a => now - pubTime(a) <= 7 * 86400000).map(a => ({ a, s: score(a) })).sort((x, y) => y.s - x.s || pubTime(y.a) - pubTime(x.a)).slice(0, max).map(x => x.a);
+}
+function weekRangeLabel(now = Date.now()) {
+  const f = new Intl.DateTimeFormat("ro-RO", { day: "numeric", month: "long" }), a = f.format(now - 6 * 86400000), b = f.format(now);
+  const [da, ma] = a.split(" "), [db, mb] = b.split(" ");
+  return ma === mb ? `${da}–${db} ${mb}` : `${a} – ${b}`;
+}
+async function igWeekSlides(items, range, fmt = "ig") {
+  const F = IG_FMT[fmt] || IG_FMT.ig, TT = fmt === "tt";
+  await Promise.all([document.fonts.load(`800 80px ${IG_DISPLAY}`), document.fonts.load(`700 34px ${IG_SANS}`)]).catch(() => {});
+  const logos = await igLogos(), out = [], LW = 50 * 976 / 192, footY = F.bottom - 54, X = F.x, W = F.w;
+  const mk = () => { const cv = document.createElement("canvas"); cv.width = IG_W; cv.height = F.h; const ctx = cv.getContext("2d"); out.push(cv); return ctx; };
+  const logo = (ctx, which, x, y, h) => { const im = logos[which]; if (im) ctx.drawImage(im, x, y, h * 976 / 192, h); };
+  // copertă
+  { const ctx = mk(); ctx.fillStyle = IG_C.ink; ctx.fillRect(0, 0, IG_W, F.h);
+    igMesh(ctx, X, F.top, W, TT ? 620 : 520, "#4B4DFF", hashStr(range)); ctx.lineWidth = 6; ctx.strokeStyle = IG_C.lime; igRound(ctx, X, F.top, W, TT ? 620 : 520, 40); ctx.stroke();
+    igSticker(ctx, X + 30, F.top + (TT ? 620 : 520) - 34, range, IG_C.lime, 34, -3);
+    let y = F.top + (TT ? 620 : 520) + 150; ctx.fillStyle = "#F3F1FF"; ctx.font = `800 ${TT ? 112 : 104}px ${IG_DISPLAY}`; ctx.fillText("Săptămâna", X, y);
+    y += TT ? 118 : 108; ctx.fillText("în ", X, y); const w = ctx.measureText("în ").width; ctx.fillStyle = IG_C.lime; ctx.fillText("5 minute", X + w, y);
+    ctx.fillStyle = IG_C.soft; ctx.font = `600 34px ${IG_SANS}`; ctx.fillText(`Cele mai importante ${items.length} știri, verificate.`, X, y + 76);
+    logo(ctx, "dark", X - 4, footY, 50);
+    ctx.font = `700 30px ${IG_SANS}`; ctx.fillStyle = IG_C.soft; const sw = "Glisează"; ctx.fillText(sw, X + W - ctx.measureText(sw).width, footY + 36); }
+  // câte o știre pe imagine
+  items.forEach((a, n) => { const ctx = mk(), c = catById(a.categoryId), col = (c && /^#[0-9a-f]{6}$/i.test(c.color || "")) ? c.color : "#4B4DFF";
+    ctx.fillStyle = IG_C.paper; ctx.fillRect(0, 0, IG_W, F.h);
+    ctx.fillStyle = IG_C.ink; ctx.font = `800 ${TT ? 200 : 170}px ${IG_DISPLAY}`; ctx.fillText(String(n + 1), X - 6, F.top + (TT ? 190 : 160));
+    ctx.font = `700 30px ${IG_SANS}`; ctx.fillStyle = IG_C.ink2; const lbl = `${n + 1} din ${items.length}`; ctx.fillText(lbl, X + W - ctx.measureText(lbl).width, F.top + 50);
+    igSticker(ctx, X + 4, F.top + (TT ? 240 : 205), a.format === "opinie" ? "Opinie" : (c ? c.name : "Știri"), col, 32, -2);
+    const t = igFit(ctx, a.title, W, TT ? 7 : 6, TT ? 84 : 76, 46, s => `800 ${s}px ${IG_DISPLAY}`); ctx.fillStyle = IG_C.ink; ctx.font = `800 ${t.size}px ${IG_DISPLAY}`;
+    let y = F.top + (TT ? 380 : 330) + t.size * 0.82; for (const l of t.lines) { ctx.fillText(l, X, y); y += t.size * 1.06; }
+    const idea = (a.tldr || []).find(Boolean) || a.dek || "";
+    if (idea) { y += 30; const it = igFit(ctx, idea, W - 50, TT ? 5 : 4, 38, 28, s => `500 ${s}px ${IG_SANS}`); const bh = it.lines.length * it.size * 1.3 + 20;
+      if (y + bh < footY - 30) { ctx.fillStyle = col; igRound(ctx, X, y, 10, bh, 5); ctx.fill(); ctx.fillStyle = IG_C.ink2; ctx.font = `500 ${it.size}px ${IG_SANS}`; let iy = y + it.size; for (const l of it.lines) { ctx.fillText(l, X + 34, iy); iy += it.size * 1.3; } } }
+    logo(ctx, "light", X - 4, footY, 50); });
+  // final
+  { const ctx = mk(); ctx.fillStyle = IG_C.lime; ctx.fillRect(0, 0, IG_W, F.h);
+    ctx.fillStyle = IG_C.ink; const h = igFit(ctx, "Toate știrile, cu sursele la vedere", W, 4, 96, 60, s => `800 ${s}px ${IG_DISPLAY}`); ctx.font = `800 ${h.size}px ${IG_DISPLAY}`;
+    let y = F.top + 120 + h.size * 0.8; for (const l of h.lines) { ctx.fillText(l, X, y); y += h.size * 1.05; }
+    ctx.font = `600 36px ${IG_SANS}`; y += 40; for (const l of igWrap(ctx, "Fiecare articol arată cine l-a scris, cine l-a verificat și pe ce surse se bazează.", W)) { ctx.fillText(l, X, y); y += 48; }
+    const ctaY = footY - (TT ? 330 : 300);
+    ctx.fillStyle = IG_C.ink; igRound(ctx, X, ctaY, W, 120, 60); ctx.fill(); ctx.fillStyle = IG_C.lime; const cta = TT ? "Link în bio" : "factz.ro"; ctx.font = `800 52px ${IG_DISPLAY}`; ctx.fillText(cta, X + W / 2 - ctx.measureText(cta).width / 2, ctaY + 80);
+    ctx.fillStyle = IG_C.ink; ctx.font = `700 32px ${IG_SANS}`; const nl = "Newsletter gratuit, în fiecare dimineață la 7"; ctx.fillText(nl, X + W / 2 - ctx.measureText(nl).width / 2, ctaY + 180);
+    ctx.font = `700 30px ${IG_SANS}`; ctx.fillText("Spill the facts, not the tea.", X + 4, footY + 36); logo(ctx, "light", X + W - LW, footY, 50); }
+  return out;
+}
+function weekCaption(items, range, fmt) {
+  const lines = items.map((a, i) => `${i + 1}. ${a.title}`);
+  const tags = fmt === "tt" ? "#stiri #stiriromania #saptamana #factz" : "#factz #stiri #stiriverificate #rezumatulsaptamanii";
+  return [`Săptămâna în 5 minute (${range})`, "", ...lines, "", fmt === "tt" ? "Toate articolele, cu sursele: link în bio." : "Toate articolele, cu sursele și Fișa de încredere: link în bio (factz.ro).", "", tags].join("\n");
+}
+async function igWeekOpen() {
+  const all = weekPick(Date.now(), 8), range = weekRangeLabel();
+  if (!all.length) { toast("Nu s-a publicat nimic în ultimele 7 zile.", true); return; }
+  openModal(`<h2 style="margin:0 0 4px">Săptămâna în 5 minute</h2><p class="small muted" style="margin:0 0 12px">${esc(range)}. Știrile sunt alese după citirile din ultima săptămână; bifează-le pe cele pe care le vrei (cel mult 6).</p>
+    <div style="display:flex;gap:6px;margin:0 0 12px"><button type="button" class="btn sm sec" data-ig-fmt="ig" aria-pressed="true">Instagram (1080×1350)</button><button type="button" class="btn sm ghost" data-ig-fmt="tt" aria-pressed="false">TikTok (1080×1920)</button></div>
+    <div class="ig-grid"><div class="ig-form">${all.map((a, i) => `<label class="check" style="margin:0 0 8px"><input type="checkbox" data-wk="${esc(a.id)}" ${i < 6 ? "checked" : ""}><span>${esc(a.title)}</span></label>`).join("")}</div>
+    <div><div class="ig-prev" aria-live="polite"><p class="muted small">Se pregătesc imaginile…</p></div>
+      <div class="field" style="margin-top:12px"><label for="ig-cap">Textul postării</label><textarea id="ig-cap" class="input" rows="7" readonly></textarea></div></div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn sec" data-ig-act="copy">Copiază textul</button><button class="btn" data-ig-act="save">Salvează imaginile</button><button class="btn ghost" data-close>Închide</button></div>`,
+    { wide: true, onMount: (m, close) => {
+      IG = { a: { slug: "saptamana-" + dayKey(Date.now()), title: "Săptămâna în 5 minute" }, m, canvases: [], fmt: "ig" };
+      m.querySelector("[data-close]").addEventListener("click", close);
+      let run = 0;
+      const chosen = () => all.filter(a => { const c = m.querySelector(`[data-wk="${a.id}"]`); return c && c.checked; }).slice(0, 6);
+      const draw = async () => { const my = ++run, items = chosen(); m.querySelector("#ig-cap").value = weekCaption(items, range, IG.fmt);
+        if (!items.length) { m.querySelector(".ig-prev").innerHTML = `<p class="muted small">Bifează cel puțin o știre.</p>`; IG.canvases = []; return; }
+        const cvs = await igWeekSlides(items, range, IG.fmt); if (my !== run) return; IG.canvases = cvs; const tw = IG.fmt === "tt" ? 152 : 216;
+        m.querySelector(".ig-prev").innerHTML = cvs.map((cv, i) => `<img src="${cv.toDataURL("image/jpeg", .7)}" alt="Imaginea ${i + 1} din ${cvs.length}" width="${tw}" height="270" style="width:${tw}px">`).join(""); };
+      m.addEventListener("change", e => { if (e.target.matches("[data-wk]")) { if (chosen().length > 6 || (m.querySelectorAll("[data-wk]:checked").length > 6)) { e.target.checked = false; toast("Cel mult 6 știri, ca să rămână „în 5 minute”.", true); } draw(); } });
+      m.addEventListener("click", async e => {
+        const f = e.target.closest("[data-ig-fmt]");
+        if (f) { IG.fmt = f.dataset.igFmt; m.querySelectorAll("[data-ig-fmt]").forEach(x => { const on = x === f; x.classList.toggle("sec", on); x.classList.toggle("ghost", !on); x.setAttribute("aria-pressed", on); }); draw(); return; }
+        const b = e.target.closest("[data-ig-act]"); if (!b) return;
+        if (b.dataset.igAct === "copy") { try { await navigator.clipboard.writeText(m.querySelector("#ig-cap").value); toast("Textul postării a fost copiat"); } catch (er) { m.querySelector("#ig-cap").select(); toast("Selectează textul și copiază-l manual.", true); } }
+        if (b.dataset.igAct === "save") igSave(IG.a);
+      });
+      draw();
+    } });
 }
 
 /* ================= „Rescrie cu AI” (editor) ================= */
@@ -3254,7 +3363,7 @@ document.addEventListener("click", async e => {
     case "sub-del": if (await confirmDialog("Adresa va fi scoasă din lista de abonați.", { ok: "Dezabonează", danger: true })) await act(() => Store.del("subscribers", id), "Abonat eliminat"); break;
     case "nl-preview": {
       try {
-        const r = await fetch("/api/newsletter", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "preview" }) });
+        const r = await fetch("/api/newsletter", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "preview", weekly: t.dataset.weekly === "1" }) });
         const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Previzualizarea nu a mers.");
         openModal(`<h2 style="margin:0 0 4px">Previzualizare</h2><p class="small muted" style="margin:0 0 12px">Subiect: ${esc(j.subject)}</p><iframe title="Newsletterul" sandbox="" style="width:100%;height:70vh;border:2px solid var(--line);border-radius:14px;background:#fff"></iframe><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn" data-close>Închide</button></div>`, { wide: true, onMount: (m, close) => { m.querySelector("iframe").srcdoc = j.html; m.querySelector("[data-close]").addEventListener("click", close); } });
       } catch (er) { toast(er.message, true); }
@@ -3286,6 +3395,12 @@ document.addEventListener("click", async e => {
       break;
     }
     case "ig-carousel": { edCollect(); if (ED.dirty) toast("Caruselul folosește ultima variantă salvată. Salvează ca să includă modificările.", true); igOpen(Store.get("articles", ED.a.id) || ED.a); break; }
+    case "cmt-auto": { const on = !settings().cmtAutoApprove; await act(() => Store.update("settings", "site", { cmtAutoApprove: on }), on ? "Comentariile „în regulă” se publică automat" : "Aprobarea automată e oprită"); break; }
+    case "cmt-flag-del": {
+      const fl = Store.list("comments").filter(c => c.status === "pending" && /spam|abuse/.test((c.aiMod || {}).verdict || ""));
+      if (!fl.length || !(await confirmDialog(`Se șterg definitiv ${fl.length} comentarii marcate de AI ca spam sau jignitoare.`, { ok: "Șterge", danger: true }))) break;
+      await act(async () => { for (const c of fl) await Store.del("comments", c.id); }, "Comentariile marcate au fost șterse"); break;
+    }
     case "cmt-all-ok": case "cmt-all-del": {
       const pend = Store.list("comments").filter(c => c.status === "pending"), del = t.dataset.act === "cmt-all-del";
       if (!pend.length) break;
@@ -3293,6 +3408,8 @@ document.addEventListener("click", async e => {
       await act(async () => { for (const c of pend) { if (del) await Store.del("comments", c.id); else await Store.update("comments", c.id, { status: "approved" }); } }, del ? "Comentariile au fost șterse" : "Comentariile au fost aprobate");
       break;
     }
+    case "week-carousel": igWeekOpen(); break;
+    case "nl-weekly": { const off = !settings().newsletterWeeklyOff; await act(() => Store.update("settings", "site", { newsletterWeeklyOff: off }), off ? "Ediția de duminică e oprită" : "Ediția de duminică e pornită"); break; }
     case "nl-toggle": { const off = !settings().newsletterOff; await act(() => Store.update("settings", "site", { newsletterOff: off }), off ? "Newsletterul e oprit" : "Newsletterul e pornit"); break; }
     case "subs-export": {
       const csv = "email,stare,data_abonarii\n" + Store.list("subscribers").map(s => `${s.email},${s.status === "active" ? "confirmat" : "neconfirmat"},${new Date(s.createdAt).toISOString()}`).join("\n");
@@ -3338,7 +3455,10 @@ document.addEventListener("submit", async e => {
     const name = String(fd.get("name")).trim(), text = String(fd.get("text")).trim(), hp = String(fd.get("website") || "");
     if (!name || text.length < 3) { toast("Completează numele și comentariul.", true); return; }
     const cid = newId("k");
-    const ok = await act(() => Store.set("comments", cid, { articleId: f.dataset.article, name, text, status: "pending", createdAt: Date.now(), ...(hp ? { website: hp } : {}) }), "Comentariu trimis. Apare după aprobare.");
+    const sb = f.querySelector("button[type=submit], button:not([type])"), sbTxt = sb ? sb.textContent : ""; if (sb) { sb.disabled = true; sb.textContent = "Se trimite…"; }
+    const ok = await act(() => Store.set("comments", cid, { articleId: f.dataset.article, name, text, status: "pending", createdAt: Date.now(), ...(hp ? { website: hp } : {}) }));
+    if (sb && document.contains(sb)) { sb.disabled = false; sb.textContent = sbTxt; }
+    if (ok) toast((Store.get("comments", cid) || {}).status === "approved" ? "Comentariul tău a fost publicat." : "Comentariu trimis. Apare după aprobarea redacției.");
     if (ok) { const mine = lsGet("cred-my-comments", []); mine.push(cid); lsSet("cred-my-comments", mine.slice(-50)); lsSet("cred-cname", name); forceRender(); }
   } else if (kind === "login") {
     const email = String(fd.get("email")).trim().toLowerCase(), pass = String(fd.get("pass"));

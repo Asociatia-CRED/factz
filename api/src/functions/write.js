@@ -4,6 +4,7 @@ const { app } = require("@azure/functions");
 const L = require("../lib");
 const seed = require("../seed.json");
 const N = require("../newsletter");
+const AI = require("../ai");
 const LINKS_RE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|ru|xyz|top|info|biz|io|shop|online)\b)/gi;
 const tooMany = msg => L.httpError(429, msg, "rate_limited");
 
@@ -131,7 +132,11 @@ app.http("write", {
           if (name.length < 1 || text.length < 3) throw L.httpError(400, "Completează numele și comentariul.", "invalid");
           if ((text.match(LINKS_RE) || []).length + (name.match(LINKS_RE) || []).length > 2) throw L.httpError(400, "Comentariul are prea multe linkuri. Păstrează cel mult două.", "invalid");
           if (!(await L.rateLimit(req, "cmt", 4, 10)) || !(await L.rateLimit(req, "cmtday", 25, 1440))) throw tooMany("Ai trimis multe comentarii într-un timp scurt. Încearcă din nou peste câteva minute.");
-          const doc = await L.putDoc("comments", id, { articleId: d.articleId, name, text, status: "pending", createdAt: now });
+          // pre-moderare cu AI: marchează comentariul; aprobarea automată doar dacă e pornită din studio și comentariul e clar în regulă
+          const aiMod = await AI.moderate({ name, text, articleTitle: a.title });
+          const site = (await L.getDoc("settings", "site")) || {};
+          const status = aiMod && aiMod.verdict === "ok" && site.cmtAutoApprove ? "approved" : "pending";
+          const doc = await L.putDoc("comments", id, { articleId: d.articleId, name, text, status, createdAt: now, ...(aiMod ? { aiMod } : {}), ...(status === "approved" ? { approvedBy: "ai" } : {}) });
           return L.json(200, { doc });
         }
         if (op === "set" && col === "subscribers" && !existing) {

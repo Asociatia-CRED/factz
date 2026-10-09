@@ -42,15 +42,35 @@ function pickArticles(all, now, { fallback = false } = {}) {
   return list.slice(0, MAX_ARTICLES);
 }
 
+// „Săptămâna în 5 minute”: cele mai importante știri din ultimele 7 zile (citiri din săptămână + „Ultima oră” / „În prim-plan”)
+const WEEK_MAX = 7;
+const DAY_RO = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest", year: "numeric", month: "2-digit", day: "2-digit" });
+const DM_RO = new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "numeric", month: "long" });
+const WD_RO = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Bucharest", weekday: "short" });
+const isSunday = ts => WD_RO.format(new Date(ts)) === "Sun";
+function weekRange(now) {
+  const from = now - 7 * L.DAY, a = DM_RO.format(new Date(from + L.DAY)), b = DM_RO.format(new Date(now));
+  const [da, ma] = a.split(" "), [db, mb] = b.split(" ");
+  return ma === mb ? `${da}–${db} ${mb}` : `${a} – ${b}`;
+}
+function pickWeek(all, now, max = WEEK_MAX) {
+  const days = new Set(Array.from({ length: 7 }, (_, i) => DAY_RO.format(new Date(now - i * L.DAY))));
+  const views = all.views || {};
+  const live = Object.entries(all.articles || {}).map(([id, a]) => ({ ...a, id })).filter(L.isLive).filter(a => now - pubTime(a) <= 7 * L.DAY && pubTime(a) <= now);
+  const score = a => { const v = views[a.id] || {}; const wk = Object.entries(v.days || {}).filter(([d]) => days.has(d)).reduce((s, [, n]) => s + (+n || 0), 0); return wk + (a.breaking ? 400 : 0) + (a.featured ? 250 : 0) + (a.format === "opinie" ? -200 : 0); };
+  return live.map(a => ({ a, s: score(a) })).sort((x, y) => y.s - x.s || pubTime(y.a) - pubTime(x.a)).slice(0, max).map(x => x.a);
+}
+
 function buildIssue(all, mediaBase, now, opts = {}) {
-  const arts = pickArticles(all, now, opts);
+  const weekly = !!opts.weekly;
+  const arts = weekly ? pickWeek(all, now) : pickArticles(all, now, opts);
   if (!arts.length) return null;
   const site = SITE(), cats = all.categories || {};
   const url = a => `${site}/articol/${encodeURIComponent(a.slug || "")}`;
   const coverUrl = a => !a.coverId ? "" : /^https:\/\//.test(a.coverId) ? a.coverId : (mediaBase ? `${mediaBase.replace(/\/+$/, "")}/${a.coverId}` : "");
   const date = cap(DATE_RO.format(new Date(now)));
   const top = arts[0];
-  const subject = (arts.length > 1 ? `${top.title} și încă ${arts.length - 1} ${arts.length - 1 === 1 ? "știre" : "știri"}` : top.title).slice(0, 140);
+  const subject = (weekly ? `Săptămâna în 5 minute: ${top.title}` : arts.length > 1 ? `${top.title} și încă ${arts.length - 1} ${arts.length - 1 === 1 ? "știre" : "știri"}` : top.title).slice(0, 140);
   const pre = ((top.tldr || []).find(Boolean) || top.dek || "").slice(0, 140);
 
   const item = (a, i) => {
@@ -78,7 +98,8 @@ function buildIssue(all, mediaBase, now, opts = {}) {
   <tr><td style="padding:0 4px 18px">
     <a href="${esc(site)}"><img src="${esc(site)}/email-logo.png" width="180" height="36" alt="factz.ro" style="display:block;border:0"></a>
     <p style="margin:14px 0 0;font:700 14px/1.4 Arial,Helvetica,sans-serif;color:#55516A">${esc(date)}</p>
-    <p style="margin:2px 0 0;font:15px/1.4 Arial,Helvetica,sans-serif;color:#16141F">${arts.length === 1 ? "O știre verificată" : `${arts.length} știri verificate`} din ultimele 24 de ore.</p>
+    ${weekly ? `<h1 style="margin:10px 0 2px;font:800 30px/1.1 Arial,Helvetica,sans-serif;color:#16141F">Săptămâna în <span style="background:#C6F21B;padding:0 6px;border-radius:6px">5 minute</span></h1>
+    <p style="margin:6px 0 0;font:15px/1.4 Arial,Helvetica,sans-serif;color:#16141F">Cele mai importante ${arts.length} știri verificate ale săptămânii (${esc(weekRange(now))}).</p>` : `<p style="margin:2px 0 0;font:15px/1.4 Arial,Helvetica,sans-serif;color:#16141F">${arts.length === 1 ? "O știre verificată" : `${arts.length} știri verificate`} din ultimele 24 de ore.</p>`}
   </td></tr>
   ${arts.map(item).join("")}
   <tr><td style="padding:8px 4px 0;font:13px/1.5 Arial,Helvetica,sans-serif;color:#55516A">
@@ -88,11 +109,11 @@ function buildIssue(all, mediaBase, now, opts = {}) {
   </td></tr>
 </table></td></tr></table></body></html>`;
 
-  const text = [`factz.ro, ${date}`, `${arts.length === 1 ? "O știre verificată" : `${arts.length} știri verificate`} din ultimele 24 de ore.`, ""]
+  const text = [`factz.ro, ${date}`, weekly ? `Săptămâna în 5 minute: cele mai importante ${arts.length} știri ale săptămânii (${weekRange(now)}).` : `${arts.length === 1 ? "O știre verificată" : `${arts.length} știri verificate`} din ultimele 24 de ore.`, ""]
     .concat(arts.flatMap(a => [a.title.toUpperCase(), ...((a.tldr || []).filter(Boolean).slice(0, 3).map(p => "- " + p)), (a.tldr || []).length ? "" : plain(a.dek), url(a), ""]))
     .concat(["Spill the facts, not the tea.", `Dezabonare: ${UNSUB}`]).filter((x, i, arr) => !(x === "" && arr[i - 1] === "")).join("\n");
 
-  return { subject, html, text, count: arts.length, ids: arts.map(a => a.id) };
+  return { subject, html, text, count: arts.length, ids: arts.map(a => a.id), weekly };
 }
 
 /* ---------- e-mailul de confirmare a abonării ---------- */
@@ -147,4 +168,4 @@ async function send(to, { subject, html, text }, unsub, { wait = false, replyTo 
   }
 }
 
-module.exports = { SITE, configured, newToken, sameToken, buildIssue, confirmEmail, send, unsubUrl, inkOn };
+module.exports = { isSunday, pickWeek, weekRange, SITE, configured, newToken, sameToken, buildIssue, confirmEmail, send, unsubUrl, inkOn };

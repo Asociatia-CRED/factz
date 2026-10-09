@@ -50,9 +50,10 @@ app.http("newsletter", {
       if (body.action === "preview" || body.action === "test") {
         const me = await L.resolveMember(L.principal(req), await L.readCol("users"));
         if (L.rank(me) < 2) throw L.httpError(403, "Doar editorii pot vedea newsletterul înainte de trimitere.", "forbidden");
-        const issue = N.buildIssue(await L.readAll(), mediaBase(), now, { fallback: true });
+        const weekly = body.weekly === true || (body.weekly == null && N.isSunday(now) && !(await settingsSite()).newsletterWeeklyOff);
+        const issue = N.buildIssue(await L.readAll(), mediaBase(), now, { fallback: true, weekly }) || (weekly ? N.buildIssue(await L.readAll(), mediaBase(), now, { fallback: true }) : null);
         if (!issue) throw L.httpError(400, "Nu e niciun articol publicat încă, deci newsletterul ar fi gol.", "invalid");
-        if (body.action === "preview") return L.json(200, { subject: issue.subject, html: issue.html.split("%%UNSUB%%").join("#"), count: issue.count });
+        if (body.action === "preview") return L.json(200, { subject: issue.subject, html: issue.html.split("%%UNSUB%%").join("#"), count: issue.count, weekly: !!issue.weekly });
         const to = String(body.email || "").trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) throw L.httpError(400, "Scrie o adresă de e-mail validă pentru test.", "invalid");
         const res = await N.send(to, { ...issue, subject: "[Test] " + issue.subject }, `${N.SITE()}/newsletter`, { wait: true, replyTo: (await settingsSite()).contactEmail });
@@ -88,7 +89,10 @@ app.http("newsletter", {
         // ediția zilei se construiește o singură dată, ca toți abonații să primească același e-mail
         let issue = await L.getDoc("agent", "nl-issue");
         if (!issue || issue.day !== today) {
-          const built = N.buildIssue(await L.readAll(), mediaBase(), now);
+          // duminica pleacă „Săptămâna în 5 minute” (dacă nu e oprită din studio); în celelalte zile, ediția obișnuită
+          const weekly = N.isSunday(now) && !site.newsletterWeeklyOff;
+          const all = await L.readAll();
+          const built = N.buildIssue(all, mediaBase(), now, { weekly }) || (weekly ? N.buildIssue(all, mediaBase(), now) : null);
           issue = built ? { day: today, ...built, builtAt: now } : { day: today, empty: true, builtAt: now };
           await L.putDoc("agent", "nl-issue", issue);
         }
