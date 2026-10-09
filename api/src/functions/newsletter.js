@@ -59,6 +59,23 @@ app.http("newsletter", {
         return L.json(200, { ok: true, count: issue.count, status: res.status, error: res.error || "", from: process.env.NEWSLETTER_FROM || "DoNotReply@factz.ro" });
       }
 
+      /* ---------- redacția: retrimite e-mailul de confirmare unui abonat ---------- */
+      if (body.action === "resend") {
+        const me = await L.resolveMember(L.principal(req), await L.readCol("users"));
+        if (L.rank(me) < 2) throw L.httpError(403, "Doar editorii pot retrimite confirmarea.", "forbidden");
+        const id = String(body.id || ""); if (!L.ID_RE.test(id)) throw L.httpError(400, "Abonat invalid.", "invalid");
+        const sub = await L.getDoc("subscribers", id);
+        if (!sub || !sub.email) throw L.httpError(404, "Abonatul nu mai există.", "not_found");
+        if (sub.status === "active") return L.json(200, { ok: true, status: "Succeeded", note: "Adresa e deja confirmată." });
+        if (!sub.token) sub.token = N.newToken();
+        let res;
+        try { res = await N.send(sub.email, N.confirmEmail({ ...sub, id }), null, { wait: true }); }
+        catch (e) { context.error(e); res = { status: "Failed", error: String((e && e.message) || e).slice(0, 200) }; }
+        const ok = res.status === "Succeeded" || res.status === "Running" || res.status === "Queued";
+        await L.putDoc("subscribers", id, { ...sub, status: "pending", ...(ok ? { confirmSentAt: now, lastError: undefined } : { lastError: (res.error || res.status).slice(0, 200) }) });
+        return L.json(200, { ok: true, status: res.status, error: res.error || "", from: process.env.NEWSLETTER_FROM || "DoNotReply@factz.ro" });
+      }
+
       /* ---------- trimiterea zilnică (GitHub Actions) ---------- */
       if (body.action === "batch") {
         if (!agentOk(req)) throw L.httpError(401, "Cheia AGENT_TOKEN lipsește sau diferă între GitHub și Azure.", "forbidden");

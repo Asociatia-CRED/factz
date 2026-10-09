@@ -2492,7 +2492,7 @@ function pageSubs() {
       </div></div>`;
   return adminShell("subs", "Abonați newsletter", `${active.length} ${active.length === 1 ? "abonat confirmat" : "abonați confirmați"}${list.length > active.length ? `, ${list.length - active.length} în așteptare` : ""}, ${week} noi în ultimele 7 zile`, CAP.downloads && list.length ? `<button class="btn sec" data-act="subs-export">Descarcă lista (CSV)</button>` : "", `
     ${nlCard}
-    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>E-mail</th><th>Stare</th><th>Abonat</th><th><span class="sr">Acțiuni</span></th></tr></thead><tbody>${list.map(s => `<tr><td class="t-title">${esc(s.email)}</td><td>${Store.mode === "api" ? stLabel(s) : ""}</td><td class="muted small">${esc(fmtDateTime(s.createdAt))}</td><td><div class="acts"><button class="btn ghost sm" style="color:var(--danger)" data-act="sub-del" data-id="${esc(s.id)}">Dezabonează</button></div></td></tr>`).join("")}</tbody></table></div>`
+    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>E-mail</th><th>Stare</th><th>Abonat</th><th><span class="sr">Acțiuni</span></th></tr></thead><tbody>${list.map(s => `<tr><td class="t-title">${esc(s.email)}</td><td>${Store.mode === "api" ? stLabel(s) : ""}${s.status !== "active" && s.lastError ? `<div class="hint" style="color:var(--danger);max-width:320px">Confirmarea n-a plecat: ${esc(s.lastError)}</div>` : ""}</td><td class="muted small">${esc(fmtDateTime(s.createdAt))}</td><td><div class="acts">${Store.mode === "api" && s.status !== "active" ? `<button class="btn sec sm" data-act="sub-resend" data-id="${esc(s.id)}">Retrimite confirmarea</button>` : ""}<button class="btn ghost sm" style="color:var(--danger)" data-act="sub-del" data-id="${esc(s.id)}">Dezabonează</button></div></td></tr>`).join("")}</tbody></table></div>`
       : `<div class="empty"><h3>Niciun abonat încă</h3><p>Formularul de abonare apare pe prima pagină a site-ului.</p></div>`}`);
 }
 
@@ -2945,6 +2945,19 @@ document.addEventListener("click", async e => {
       } catch (er) { toast(er.message, true); }
       break;
     }
+    case "sub-resend": {
+      t.disabled = true;
+      try {
+        const r = await fetch("/api/newsletter", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "resend", id }) });
+        const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Nu s-a putut retrimite.");
+        if (j.note) toast(j.note);
+        else if (j.status === "Succeeded") toast("Azure a livrat e-mailul de confirmare. Verifică și în Spam.");
+        else if (["Running", "Queued", "NotStarted"].includes(j.status)) toast("Azure încă trimite e-mailul. Mai așteaptă un minut.");
+        else throw new Error(`Azure nu a putut trimite e-mailul${j.error ? ": " + j.error : ""} (expeditor: ${j.from}).`);
+      } catch (er) { toast(er.message, true); }
+      finally { t.disabled = false; Store.apiLoad().catch(() => {}); }
+      break;
+    }
     case "nl-toggle": { const off = !settings().newsletterOff; await act(() => Store.update("settings", "site", { newsletterOff: off }), off ? "Newsletterul e oprit" : "Newsletterul e pornit"); break; }
     case "subs-export": {
       const csv = "email,stare,data_abonarii\n" + Store.list("subscribers").map(s => `${s.email},${s.status === "active" ? "confirmat" : "neconfirmat"},${new Date(s.createdAt).toISOString()}`).join("\n");
@@ -2982,6 +2995,7 @@ document.addEventListener("submit", async e => {
     const ok = await act(() => Store.set("subscribers", sid, { email, createdAt: Date.now(), ...(hp ? { website: hp } : {}) }));
     if (ok) {
       const doc = Store.get("subscribers", sid) || {}, pending = Store.mode === "api" && doc.status !== "active";
+      if (pending && doc.failed) { toast("Nu am putut trimite acum e-mailul de confirmare. Adresa e salvată, dar mai încearcă o dată peste câteva minute.", true); return; }
       lsSet("cred-subscribed", email); lsSet("cred-sub-pending", pending);
       f.outerHTML = `<p style="margin:0;font-weight:600;color:var(--ok)" role="status">${pending ? "Ți-am trimis un e-mail. Apasă linkul din el ca să confirmi abonarea. Dacă nu-l vezi, uită-te și în Spam sau Promoții." : "Ești abonat. Primul e-mail sosește la 7 dimineața."}</p>`;
     }

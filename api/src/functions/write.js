@@ -147,12 +147,15 @@ app.http("write", {
           // abonare nouă sau neconfirmată: trimitem (din nou) e-mailul de confirmare, cel mult o dată la 10 minute
           const [sid, sub] = found ? [found[0], { ...found[1] }] : [id, { email, status: "pending", token: N.newToken(), createdAt: now }];
           if (!sub.token) sub.token = N.newToken();
-          let mailed = false;
-          if (N.configured() && (!sub.confirmSentAt || now - sub.confirmSentAt > 10 * 60000)) {
-            try { await N.send(email, N.confirmEmail({ ...sub, id: sid })); sub.confirmSentAt = now; mailed = true; } catch (e) { context.error(e); }
+          let mailed = false, failed = false;
+          if (!N.configured()) { failed = true; sub.lastError = "Lipsește ACS_CONNECTION_STRING în Azure."; }
+          else if (!sub.confirmSentAt || now - sub.confirmSentAt > 10 * 60000) {
+            try { await N.send(email, N.confirmEmail({ ...sub, id: sid })); sub.confirmSentAt = now; delete sub.lastError; mailed = true; }
+            catch (e) { context.error(e); failed = true; sub.lastError = String((e && e.message) || e).slice(0, 200); }
           }
+          // abonarea rămâne salvată chiar dacă e-mailul n-a plecat: trimiterea zilnică reîncearcă singură
           await L.putDoc("subscribers", sid, { ...sub, status: "pending" });
-          return L.json(200, { doc: { email, status: "pending", createdAt: sub.createdAt, mailed } });
+          return L.json(200, { doc: { email, status: "pending", createdAt: sub.createdAt, mailed, failed } });
         }
         throw L.httpError(p ? 403 : 401, p ? "Contul tău nu face parte din redacție." : "Intră în studio ca să faci modificări.", "forbidden");
       }
