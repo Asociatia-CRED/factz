@@ -55,8 +55,8 @@ app.http("newsletter", {
         if (body.action === "preview") return L.json(200, { subject: issue.subject, html: issue.html.split("%%UNSUB%%").join("#"), count: issue.count });
         const to = String(body.email || "").trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) throw L.httpError(400, "Scrie o adresă de e-mail validă pentru test.", "invalid");
-        await N.send(to, { ...issue, subject: "[Test] " + issue.subject }, `${N.SITE()}/#/newsletter`);
-        return L.json(200, { ok: true, count: issue.count });
+        const res = await N.send(to, { ...issue, subject: "[Test] " + issue.subject }, `${N.SITE()}/#/newsletter`, { wait: true });
+        return L.json(200, { ok: true, count: issue.count, status: res.status, error: res.error || "", from: process.env.NEWSLETTER_FROM || "DoNotReply@factz.ro" });
       }
 
       /* ---------- trimiterea zilnică (GitHub Actions) ---------- */

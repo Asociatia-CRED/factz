@@ -122,7 +122,8 @@ function client() {
 }
 const unsubUrl = sub => `${SITE()}/api/newsletter?a=unsub&id=${encodeURIComponent(sub.id)}&t=${encodeURIComponent(sub.token || "")}`;
 // Trimite un e-mail. Nu așteaptă livrarea: Azure îl pune la coadă și îl livrează în câteva secunde.
-async function send(to, { subject, html, text }, unsub) {
+// Cu { wait: true } așteaptă (cel mult 25 de secunde) rezultatul real de la Azure: livrat sau eroarea exactă.
+async function send(to, { subject, html, text }, unsub, { wait = false } = {}) {
   const message = {
     senderAddress: FROM(),
     content: { subject, html: unsub ? html.split(UNSUB).join(esc(unsub)) : html, plainText: unsub ? text.split(UNSUB).join(unsub) : text },
@@ -130,11 +131,17 @@ async function send(to, { subject, html, text }, unsub) {
     disableUserEngagementTracking: true,
   };
   if (unsub) message.headers = { "List-Unsubscribe": `<${unsub}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
-  try { await client().beginSend(message); }
+  try {
+    const poller = await client().beginSend(message);
+    if (!wait) return { status: "Queued" };
+    const res = await Promise.race([poller.pollUntilDone(), new Promise(r => setTimeout(() => r(null), 25000))]);
+    if (!res) return { status: "Running" };
+    return { status: res.status || "Unknown", error: res.error ? `${res.error.code || ""} ${res.error.message || ""}`.trim() : "" };
+  }
   catch (e) {
     const status = e && (e.statusCode || (e.response && e.response.status));
     if (status === 429) { const er = new Error("Azure a atins limita de trimitere. Reîncerc mai târziu."); er.code = "throttled"; throw er; }
-    if (status === 400 && message.headers) { delete message.headers; await client().beginSend(message); return; }
+    if (status === 400 && message.headers) { delete message.headers; await client().beginSend(message); return { status: "Queued" }; }
     throw e;
   }
 }

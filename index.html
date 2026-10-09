@@ -3012,7 +3012,9 @@ document.addEventListener("submit", async e => {
     try {
       const r = await fetch("/api/newsletter", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "test", email }) });
       const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Testul nu a plecat.");
-      toast(`Testul a plecat spre ${email}. Verifică și în Spam.`);
+      if (j.status === "Succeeded") toast(`Azure a livrat e-mailul către ${email}. Dacă nu-l vezi, caută în Spam și Promoții.`);
+      else if (j.status === "Running" || j.status === "Queued" || j.status === "NotStarted") toast(`Azure încă trimite e-mailul spre ${email}. Mai așteaptă un minut și verifică și în Spam.`);
+      else throw new Error(`Azure nu a putut trimite e-mailul${j.error ? ": " + j.error : ""} (expeditor: ${j.from}).`);
     } catch (er) { toast(er.message, true); } finally { if (btn) btn.disabled = false; }
   } else if (kind === "settings") {
     const path = String(fd.get("studioPath") || "").trim().toLowerCase();
