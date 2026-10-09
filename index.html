@@ -388,6 +388,9 @@ body > .fly{position:fixed}
 .story-btn{flex:none; width:78px; display:flex; flex-direction:column; align-items:center; gap:6px; border:0; background:none; padding:0; scroll-snap-align:start}
 .story-btn .ring{width:72px; height:72px; border-radius:50%; padding:3px; background:conic-gradient(from 200deg, var(--cat,var(--brand)), var(--lime), var(--cat,var(--brand)))}
 .story-btn.seen .ring{background:var(--line)}
+.hp{position:absolute!important; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden}
+.story-btn .ring{position:relative}
+.story-n{position:absolute; right:-2px; bottom:-2px; min-width:22px; height:22px; padding:0 6px; border-radius:11px; display:grid; place-items:center; background:var(--ink); color:var(--paper); border:2px solid var(--paper); font-size:.6875rem; font-weight:800; line-height:1}
 .story-btn .ring > span{display:block; width:100%; height:100%; border-radius:50%; overflow:hidden; border:3px solid var(--paper); position:relative; background:var(--surface-2)}
 .story-btn .ring svg, .story-btn .ring img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
 .story-btn small{font-size:.6875rem; font-weight:700; color:var(--ink-2); max-width:78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1200,6 +1203,12 @@ function genCover(a) {
     : `<rect x="${1150 + r() * 200}" y="${120 + r() * 150}" width="220" height="220" rx="60" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="3" transform="rotate(${r() * 40 - 20} 1300 300)"/>`;
   return `<svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs>${defs}</defs><rect width="1600" height="1000" fill="${bg}"/>${blobs}${deco}</svg>`;
 }
+// legenda copertei; la fotografiile cu licență liberă, creditul are link spre sursă (cerință a licenței)
+function coverCaptionHTML(a) {
+  if (!a.coverCaption) return "";
+  const src = /^https:\/\//.test(a.coverSourceUrl || "") ? a.coverSourceUrl : "", lic = /^https:\/\//.test(a.coverLicenseUrl || "") ? a.coverLicenseUrl : "";
+  return `<figcaption>${esc(a.coverCaption)}${src ? ` <a href="${esc(src)}" target="_blank" rel="noopener noreferrer">Sursa</a>` : ""}${lic ? ` <a href="${esc(lic)}" target="_blank" rel="noopener noreferrer">Licența</a>` : ""}</figcaption>`;
+}
 function coverInner(a) {
   if (a.coverId) return `<img src="${esc(mediaUrl(a.coverId))}" alt="${esc(a.coverAlt || "")}" loading="lazy" decoding="async">`;
   return genCover(a);
@@ -1324,8 +1333,8 @@ function pollBox() {
     ${voted ? "" : `<div class="hint">Votează ca să vezi rezultatele.</div>`}</section>`;
 }
 function newsletterBox(cls = "b-4") {
-  return `<section class="tile b-news ${cls}" id="newsletter"><h2>Facts, la 7 dimineața.</h2><p>Cele mai importante 5 știri ale zilei, verificate, într-un singur e-mail. Durează 3 minute.</p>
-    ${lsGet("cred-subscribed", "") ? `<p style="margin:0;font-weight:700">Ești abonat. Ne vedem mâine dimineață.</p>` : `<form class="inline-form" data-form="subscribe"><label class="sr" for="nl-email">E-mail</label><input id="nl-email" name="email" type="email" class="input" placeholder="nume@exemplu.ro" required><button class="btn">Vreau</button></form>`}</section>`;
+  return `<section class="tile b-news ${cls}" id="newsletter"><h2>Facts, la 7 dimineața.</h2><p>Știrile verificate din ultimele 24 de ore, într-un singur e-mail. Durează 3 minute.</p>
+    ${lsGet("cred-subscribed", "") ? `<p style="margin:0;font-weight:700">${lsGet("cred-sub-pending", false) ? "Mai ai un pas: confirmă abonarea din e-mailul primit de la noi." : "Ești abonat. Ne vedem mâine dimineață."}</p>` : `<form class="inline-form" data-form="subscribe"><label class="sr" for="nl-email">E-mail</label><input id="nl-email" name="email" type="email" class="input" placeholder="nume@exemplu.ro" required><span class="hp" aria-hidden="true"><label>Nu completa acest câmp<input name="website" tabindex="-1" autocomplete="off"></label></span><button class="btn">Vreau</button></form>`}</section>`;
 }
 let trendRange = "azi";
 function trendBox(all, cls = "b-4") {
@@ -1339,14 +1348,29 @@ function trendBox(all, cls = "b-4") {
 function storyItems() {
   const all = liveArts();
   const recent = all.filter(a => Date.now() - pubTime(a) < 3 * 86400000);
-  return (recent.length >= 4 ? recent : all).filter(a => a.format !== "opinie").slice(0, 10);
+  return (recent.length >= 4 ? recent : all).filter(a => a.format !== "opinie").slice(0, 20);
+}
+// O bulă pe categorie, ca pe Instagram: toate știrile din aceeași categorie stau în aceeași bulă.
+// Ordinea bulelor urmează cea mai nouă știre din fiecare categorie.
+function storyGroups() {
+  const groups = [], byKey = {};
+  storyItems().forEach(a => {
+    const k = a.categoryId || "_";
+    if (!byKey[k]) { byKey[k] = { key: k, cat: catById(a.categoryId), items: [] }; groups.push(byKey[k]); }
+    byKey[k].items.push(a);
+  });
+  return groups;
 }
 function storiesRow() {
-  const items = storyItems(); if (!items.length) return "";
+  const groups = storyGroups(); if (!groups.length) return "";
   const seen = lsGet("cred-seen", []);
   return `<div class="stories" role="list" aria-label="Pe scurt">
     <button class="story-btn first" data-act="stories" role="listitem"><span class="ring"><span>Pe<br>scurt</span></span><small>Toate</small></button>
-    ${items.map((a, i) => { const c = catById(a.categoryId); return `<button class="story-btn ${seen.includes(a.id) ? "seen" : ""}" data-act="stories" data-i="${i}" ${catStyle(c)} role="listitem" aria-label="${esc(a.title)}"><span class="ring"><span>${coverInner(a)}</span></span><small>${esc(c ? c.name : "Știri")}</small></button>`; }).join("")}
+    ${groups.map((g, gi) => {
+      const fresh = g.items.filter(a => !seen.includes(a.id));
+      const cover = fresh[0] || g.items[0], name = g.cat ? g.cat.name : "Știri", n = g.items.length;
+      return `<button class="story-btn ${fresh.length ? "" : "seen"}" data-act="stories" data-g="${gi}" ${catStyle(g.cat)} role="listitem" aria-label="${esc(name)}: ${n} ${n === 1 ? "știre" : "știri"}${fresh.length && fresh.length < n ? `, ${fresh.length} necitite` : ""}"><span class="ring"><span>${coverInner(cover)}</span>${n > 1 ? `<b class="story-n" aria-hidden="true">${n}</b>` : ""}</span><small>${esc(name)}</small></button>`;
+    }).join("")}
   </div>`;
 }
 
@@ -1478,8 +1502,8 @@ function pageArticle(slug) {
   const related = liveArts().filter(x => x.id !== a.id).map(x => ({ x, s: (x.topicId && x.topicId === a.topicId ? 5 : 0) + (x.categoryId === a.categoryId ? 2 : 0) + (x.tags || []).filter(t => (a.tags || []).includes(t)).length * 3 })).filter(o => o.s > 0).sort((p, q) => q.s - p.s || pubTime(q.x) - pubTime(p.x)).slice(0, 3).map(o => o.x);
   const tldr = (a.tldr || []).filter(Boolean);
   const media = (a.format === "live" && !a.coverId && !a.videoId) ? "" : a.videoId
-    ? `<figure class="art-media"><div class="cover" style="background:#000"><video src="${esc(mediaUrl(a.videoId))}" controls preload="metadata" playsinline ${a.coverId ? `poster="${esc(mediaUrl(a.coverId))}"` : ""}></video></div>${a.coverCaption ? `<figcaption>${esc(a.coverCaption)}</figcaption>` : ""}</figure>`
-    : `<figure class="art-media">${coverBox(a, { bm: false, stickers: false })}${a.coverCaption ? `<figcaption>${esc(a.coverCaption)}</figcaption>` : ""}</figure>`;
+    ? `<figure class="art-media"><div class="cover" style="background:#000"><video src="${esc(mediaUrl(a.videoId))}" controls preload="metadata" playsinline ${a.coverId ? `poster="${esc(mediaUrl(a.coverId))}"` : ""}></video></div>${coverCaptionHTML(a)}</figure>`
+    : `<figure class="art-media">${coverBox(a, { bm: false, stickers: false })}${coverCaptionHTML(a)}</figure>`;
   const sources = String(a.sources || "").split("\n").map(s => s.trim()).filter(Boolean);
   const revs = (a.revisions || []).filter(r => r.kind !== "minor");
   const R = lsGet("cred-reacts", {})[a.id], rc = (Store.get("reactions", a.id) || {}).counts || {};
@@ -1529,6 +1553,7 @@ function pageArticle(slug) {
             <dt>Verificat de</dt><dd>${ver ? `${esc(ver.name)}, ${esc((ROLE[ver.role] || "").toLowerCase())}` : "Redacția"}</dd>
             <dt>Surse</dt><dd>${sources.length ? sources.map(s => esc(s).replace(/(https?:\/\/[^\s<]+)/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer" style="text-decoration:underline">${u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 48)}${u.length > 60 ? "…" : ""}</a>`)).join("<br>") : "Documentare proprie a redacției"}</dd>
             ${a.aiDraft ? `<dt>Asistență AI</dt><dd>Prima variantă a fost pregătită de asistentul AI al redacției pe baza surselor de mai sus, apoi verificată și editată de un editor.</dd>` : ""}
+            ${a.coverId && a.coverCaption && a.coverSourceUrl ? `<dt>Fotografie</dt><dd>${esc(a.coverCaption)}. Folosită conform licenței, cu link spre <a href="${esc(a.coverSourceUrl)}" target="_blank" rel="noopener noreferrer">sursa originală</a>.</dd>` : ""}
             <dt>Publicat</dt><dd>${esc(fmtDateTime(pubTime(a)))}</dd>
             <dt>Istoric</dt><dd>${revs.length ? revs.slice().reverse().map(r => `<span class="rev ${r.kind === "correction" ? "cor" : ""}"><b>${r.kind === "correction" ? "Corectură" : "Actualizare"}</b>, ${esc(fmtDateTime(r.at))}: ${esc(r.note)}</span>`).join("") : "Nicio modificare după publicare"}</dd>
           </dl>
@@ -1538,7 +1563,7 @@ function pageArticle(slug) {
           ${shown.length ? shown.map(x => `<div class="cmt ${x.status !== "approved" ? "pending" : ""}"><div class="cmt-h"><strong>${esc(x.name)}</strong><span>${esc(relTime(x.createdAt))}${x.status !== "approved" ? ", așteaptă aprobarea" : ""}</span></div><p>${esc(x.text)}</p></div>`).join("") : `<p class="muted">Niciun comentariu încă. Fii primul.</p>`}
           <form class="cmt-form" data-form="comment" data-article="${esc(a.id)}">
             <div class="field"><label for="c-name">Numele tău</label><input id="c-name" name="name" class="input" required maxlength="60" value="${esc(lsGet("cred-cname", ""))}"></div>
-            <div class="field"><label for="c-text">Comentariu</label><textarea id="c-text" name="text" class="input" required maxlength="1500" rows="3"></textarea><span class="hint">Apare după aprobarea redacției. Fii civilizat.</span></div>
+            <div class="field"><label for="c-text">Comentariu</label><textarea id="c-text" name="text" class="input" required maxlength="1500" rows="3"></textarea><span class="hint">Apare după aprobarea redacției. Fii civilizat.</span></div><span class="hp" aria-hidden="true"><label>Nu completa acest câmp<input name="website" tabindex="-1" autocomplete="off"></label></span>
             <button class="btn">Trimite</button>
           </form>
         </section>
@@ -1598,6 +1623,17 @@ function pageStatic(key) {
   setMeta(P[0], "");
   return readerShell("", `<div class="wrap"><header class="page-head static" style="border:0"><h1>${esc(P[0])}</h1></header><div class="static">${P[1]}</div></div>`);
 }
+function pageNewsletterStatus(s) {
+  const M = {
+    confirmed: ["Abonare confirmată", "Gata, ești pe listă. Primul newsletter sosește mâine la 7 dimineața, cu știrile verificate din ultimele 24 de ore."],
+    unsubscribed: ["Te-ai dezabonat", "Nu mai primești newsletterul, iar adresa ta a fost ștearsă din lista noastră. Te poți abona din nou oricând de pe prima pagină."],
+    invalid: ["Linkul nu mai e valabil", "Poate ai folosit deja linkul sau abonarea a expirat. Te poți abona din nou de pe prima pagină."],
+  }[s] || ["Newsletter factz.ro", "Știrile verificate din ultimele 24 de ore, în fiecare dimineață la 7. Te abonezi de pe prima pagină."];
+  if (s === "confirmed") { lsSet("cred-sub-pending", false); if (!lsGet("cred-subscribed", "")) lsSet("cred-subscribed", "1"); }
+  if (s === "unsubscribed") { lsSet("cred-subscribed", ""); lsSet("cred-sub-pending", false); }
+  setMeta(M[0], "");
+  return readerShell("", `<div class="wrap"><div class="empty" style="margin-top:32px"><h1 style="font-size:clamp(1.6rem,1rem + 2vw,2.4rem);margin:0 0 10px">${esc(M[0])}</h1><p>${esc(M[1])}</p><a class="btn" href="#/" style="margin-top:12px">Mergi la prima pagină</a></div></div>`);
+}
 function page404() {
   setMeta("Pagina nu există", "");
   return readerShell("", `<div class="wrap" style="padding-top:56px;padding-bottom:56px"><div class="empty"><h3>Pagina asta nu există</h3><p>Poate a fost mutată, sau linkul e greșit.</p><a class="btn" href="#/">Du-mă acasă</a></div></div>`);
@@ -1611,16 +1647,26 @@ function setMeta(title, desc) {
 
 /* ================= stories ================= */
 let SV = null;
-function openStories(start = 0) {
-  const items = storyItems(); if (!items.length) { toast("Nu sunt știri noi acum."); return; }
+function openStories(group = -1) {
+  const groups = storyGroups(); if (!groups.length) { toast("Nu sunt știri noi acum."); return; }
+  // lista completă, în ordinea bulelor; fiecare bulă are intervalul ei [start, end)
+  const items = [], ranges = [];
+  groups.forEach(g => { ranges.push([items.length, items.length + g.items.length]); items.push(...g.items); });
+  const seen = lsGet("cred-seen", []);
+  let start = 0;
+  if (group >= 0 && ranges[group]) {
+    // bula aleasă se deschide la prima știre necitită din ea
+    const [a, b] = ranges[group]; start = a;
+    for (let k = a; k < b; k++) if (!seen.includes(items[k].id)) { start = k; break; }
+  }
   closeStories();
-  SV = { items, i: Math.min(start, items.length - 1), t0: 0, raf: 0, paused: false, el: document.createElement("div"), prev: document.activeElement };
+  SV = { items, ranges, i: start, t0: 0, raf: 0, paused: false, el: document.createElement("div"), prev: document.activeElement };
   SV.el.className = "sv"; SV.el.setAttribute("role", "dialog"); SV.el.setAttribute("aria-modal", "true"); SV.el.setAttribute("aria-label", "Pe scurt");
   document.body.appendChild(SV.el); document.body.style.overflow = "hidden"; syncInert();
   bindStoryEvents(SV.el);
   drawStory();
 }
-function closeStories() { if (!SV) return; cancelAnimationFrame(SV.raf); SV.el.remove(); document.body.style.overflow = ""; syncInert(); document.removeEventListener("keydown", storyKeys, true); const p = SV.prev; SV = null; if (p && p.focus && document.contains(p)) p.focus(); }
+function closeStories() { if (!SV) return; cancelAnimationFrame(SV.raf); SV.el.remove(); document.body.style.overflow = ""; syncInert(); document.removeEventListener("keydown", storyKeys, true); const p = SV.prev; SV = null; if (p && p.focus && document.contains(p)) p.focus(); if (document.querySelector(".stories")) scheduleRender(); }
 function storyKeys(e) {
   if (!SV) return;
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeStories(); }
@@ -1667,6 +1713,8 @@ function bindStoryEvents(el) {
   });
 }
 const STORY_MS = 7000;
+// barele de progres arată doar știrile din bula curentă
+function svRange() { const r = (SV.ranges || []).find(([a, b]) => SV.i >= a && SV.i < b) || [0, SV.items.length]; const out = []; for (let k = r[0]; k < r[1]; k++) out.push(k); return out; }
 function drawStory() {
   const a = SV.items[SV.i], c = catById(a.categoryId);
   const seen = lsGet("cred-seen", []); if (!seen.includes(a.id)) { seen.push(a.id); lsSet("cred-seen", seen.slice(-200)); }
@@ -1674,7 +1722,7 @@ function drawStory() {
   const pts = (a.tldr || []).filter(Boolean);
   SV.el.innerHTML = `<button class="sv-nav p" data-sv="prev" aria-label="Anterior">${I.left}</button>
     <div class="sv-card" ${catStyle(c)}>
-      <div class="sv-bars">${SV.items.map((_, k) => `<i class="${k < SV.i ? "done" : ""}"><b></b></i>`).join("")}</div>
+      <div class="sv-bars">${svRange().map(k => `<i class="${k < SV.i ? "done" : ""}"><b></b></i>`).join("")}</div>
       <div class="sv-top"><span class="stickers">${c ? `<span class="sticker" ${catStyle(c)}>${esc(c.name)}</span>` : ""}${isLiveNow(a) ? `<span class="sticker live"><span class="dot"></span>LIVE</span>` : ""}<span style="font-size:.75rem;opacity:.8">${esc(relTime(pubTime(a)))}</span></span><button class="icon-btn" data-sv="close" aria-label="Închide">${I.close}</button></div>
       <div class="sv-media">${coverBox(a, { bm: false, stickers: false })}</div>
       <div class="sv-body"><h3>${esc(a.title)}</h3>${pts.length ? `<ul>${pts.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : a.dek ? `<ul><li>${esc(a.dek)}</li></ul>` : ""}
@@ -1685,7 +1733,7 @@ function drawStory() {
     <button class="sv-nav n" data-sv="next" aria-label="Următorul">${I.right}</button>`;
   SV.el.querySelector('[data-sv="close"]').focus({ preventScroll: true });
   cancelAnimationFrame(SV.raf);
-  const bar = SV.el.querySelectorAll(".sv-bars i b")[SV.i];
+  const bar = SV.el.querySelectorAll(".sv-bars i b")[SV.i - svRange()[0]];
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduce) { bar.style.width = "100%"; return; }
   let elapsed = 0, last = performance.now();
@@ -2153,6 +2201,13 @@ function pageEditor(id) {
       </aside>
     </div>`);
 }
+// creditul fotografiei urmează poza: o poză nouă își aduce creditul din Media, iar unul vechi nu rămâne lipit de altă poză
+function setCoverCredit(m) {
+  const auto = ED.a.coverSourceUrl && ED.a.coverCaption && /^Foto: /.test(ED.a.coverCaption);
+  if (m && m.credit) { ED.a.coverCaption = m.credit; ED.a.coverSourceUrl = m.sourceUrl || ""; ED.a.coverLicenseUrl = m.licenseUrl || ""; return; }
+  if (auto) ED.a.coverCaption = "";
+  ED.a.coverSourceUrl = ""; ED.a.coverLicenseUrl = ""; ED.a.aiPhoto = false;
+}
 function edCollect() {
   if (!ED) return null;
   const a = ED.a, v = id => { const el = document.getElementById(id); return el ? el.value : undefined; }, ck = id => { const el = document.getElementById(id); return el ? el.checked : undefined; };
@@ -2422,9 +2477,22 @@ function pollNew() {
 /* ================= abonați ================= */
 function pageSubs() {
   const list = Store.list("subscribers").sort((a, b) => b.createdAt - a.createdAt);
-  const week = list.filter(s => Date.now() - s.createdAt < 7 * 86400000).length;
-  return adminShell("subs", "Abonați newsletter", `${list.length} abonați, ${week} în ultimele 7 zile`, CAP.downloads && list.length ? `<button class="btn sec" data-act="subs-export">Descarcă lista (CSV)</button>` : "", `
-    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>E-mail</th><th>Abonat</th><th><span class="sr">Acțiuni</span></th></tr></thead><tbody>${list.map(s => `<tr><td class="t-title">${esc(s.email)}</td><td class="muted small">${esc(fmtDateTime(s.createdAt))}</td><td><div class="acts"><button class="btn ghost sm" style="color:var(--danger)" data-act="sub-del" data-id="${esc(s.id)}">Dezabonează</button></div></td></tr>`).join("")}</tbody></table></div>`
+  const active = list.filter(s => s.status === "active"), week = list.filter(s => Date.now() - s.createdAt < 7 * 86400000).length;
+  const st = Store.get("agent", "nl-state") || null, off = !!settings().newsletterOff, u = me();
+  const stLabel = s => s.status === "active" ? `<span class="pill st-published">Confirmat</span>` : `<span class="pill st-review">Așteaptă confirmarea</span>`;
+  const nlCard = Store.mode !== "api" ? `<div class="notice" style="margin-bottom:18px">Newsletterul se trimite doar de pe site-ul publicat.</div>` : `
+    <div class="card" style="margin-bottom:18px"><div class="card-h"><h2>Newsletterul de dimineață</h2>${off ? `<span class="pill st-off">Oprit</span>` : `<span class="pill st-published">Pornit</span>`}</div>
+      <p class="small muted" style="margin:0 0 10px">Pleacă în fiecare zi la 7, cu știrile publicate în ultimele 24 de ore, doar către abonații care au confirmat adresa. Dacă nu s-a publicat nimic, nu se trimite.</p>
+      <p style="margin:0 0 14px">${st ? `Ultima trimitere: ${esc(fmtDateTime(st.at))}. ${st.empty ? "Nu s-a trimis, pentru că nu existau știri noi." : `${st.sent} ${st.sent === 1 ? "e-mail trimis" : "e-mailuri trimise"}${st.subject ? `, cu subiectul „${esc(st.subject)}”` : ""}.`}${st.confirms ? ` Plus ${st.confirms} ${st.confirms === 1 ? "e-mail" : "e-mailuri"} de confirmare.` : ""}${(st.errors || []).length ? ` <span style="color:var(--danger)">${st.errors.length} erori.</span>` : ""}` : "Nu a plecat încă niciun newsletter."}</p>
+      ${st && (st.errors || []).length ? `<ul class="small" style="margin:0 0 14px;color:var(--danger)">${st.errors.slice(-5).map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+        <button class="btn sec" data-act="nl-preview">Previzualizează</button>
+        <form data-form="nl-test" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div class="field" style="margin:0"><label for="nl-test">Trimite un test la</label><input id="nl-test" name="email" type="email" class="input" required value="${esc((u && u.email && !/\*/.test(u.email)) ? u.email : "")}" placeholder="adresa ta"></div><button class="btn">Trimite testul</button></form>
+        ${isAdmin(u) ? `<button class="btn ghost" data-act="nl-toggle">${off ? "Pornește newsletterul" : "Oprește newsletterul"}</button>` : ""}
+      </div></div>`;
+  return adminShell("subs", "Abonați newsletter", `${active.length} ${active.length === 1 ? "abonat confirmat" : "abonați confirmați"}${list.length > active.length ? `, ${list.length - active.length} în așteptare` : ""}, ${week} noi în ultimele 7 zile`, CAP.downloads && list.length ? `<button class="btn sec" data-act="subs-export">Descarcă lista (CSV)</button>` : "", `
+    ${nlCard}
+    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>E-mail</th><th>Stare</th><th>Abonat</th><th><span class="sr">Acțiuni</span></th></tr></thead><tbody>${list.map(s => `<tr><td class="t-title">${esc(s.email)}</td><td>${Store.mode === "api" ? stLabel(s) : ""}</td><td class="muted small">${esc(fmtDateTime(s.createdAt))}</td><td><div class="acts"><button class="btn ghost sm" style="color:var(--danger)" data-act="sub-del" data-id="${esc(s.id)}">Dezabonează</button></div></td></tr>`).join("")}</tbody></table></div>`
       : `<div class="empty"><h3>Niciun abonat încă</h3><p>Formularul de abonare apare pe prima pagină a site-ului.</p></div>`}`);
 }
 
@@ -2508,7 +2576,7 @@ function pageSettings() {
         <p class="small muted" style="margin:0 0 12px">Studioul nu are niciun link vizibil pe site. Se intră doar prin adresa de mai jos sau apăsând de 5 ori pe „©” din subsolul site-ului.</p>
         <div class="field"><label for="st-path">Adresa secretă</label><div style="display:flex;align-items:center;gap:8px"><span class="muted">#/</span><input id="st-path" name="studioPath" class="input" value="${esc(studioPath())}" pattern="[a-zA-Z0-9-]{4,40}" required></div>
           <span class="hint">Doar litere, cifre și cratime, minimum 4 caractere. După schimbare, vechea adresă nu mai funcționează. Link actual: ${esc(base)}${esc(ST())}</span></div>
-        <div class="notice" style="margin:0">Ascunderea adresei reduce vizitele accidentale, dar nu înlocuiește o autentificare reală. Pentru producție e nevoie de un server cu parole și sesiuni securizate.</div>
+        <div class="notice" style="margin:0">${Store.mode === "api" ? "Adresa ascunsă doar reduce vizitele accidentale. Protecția reală e logarea cu Microsoft sau GitHub: fără un cont din lista de utilizatori, nimeni nu poate modifica nimic." : "Ascunderea adresei reduce vizitele accidentale, dar nu înlocuiește o autentificare reală. Pentru producție e nevoie de un server cu parole și sesiuni securizate."}</div>
       </div>
       <div class="card"><h2>Contact</h2>
         <div class="field"><label for="st-mail">E-mail public al redacției</label><input id="st-mail" name="contactEmail" type="email" class="input" value="${esc(s.contactEmail || "")}" placeholder="redactie@factz.ro"></div></div>
@@ -2542,6 +2610,7 @@ function pageAgent() {
       <form class="card" data-form="agent">
         <h2>Setări</h2>
         <label class="check"><input type="checkbox" name="enabled" ${cfg.enabled ? "checked" : ""}><span>Asistent pornit</span></label>
+        <label class="check"><input type="checkbox" name="photos" ${cfg.photos !== false ? "checked" : ""}><span>Propune fotografii de copertă cu licență liberă (Wikimedia Commons, Openverse)</span></label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field"><label for="ag-max">Ciorne pe zi, maximum</label><input id="ag-max" name="maxPerDay" type="number" min="1" max="40" class="input" value="${cfg.maxPerDay}"></div>
           <div class="field"><label for="ag-run">Ciorne pe rulare (oră)</label><input id="ag-run" name="perRun" type="number" min="1" max="3" class="input" value="${cfg.perRun}"></div>
@@ -2594,6 +2663,7 @@ function viewFor(r) {
   if (a === "tag") return { html: pageTag(b), key: "tag" };
   if (a === "autor") return { html: pageAuthor(b), key: "author" };
   if (a === "video") return { html: pageVideo(), key: "video" };
+  if (a === "newsletter") return { html: pageNewsletterStatus(r.q.get("s")), key: "nl:" + r.q.get("s") };
   if (["despre", "contact", "termeni", "confidentialitate", "cookies", "accesibilitate"].includes(a)) return { html: pageStatic(a), key: "static:" + a };
   return { html: page404(), key: "404" };
 }
@@ -2639,7 +2709,7 @@ function refreshEditorChrome() {
   // actualizează doar insigna de comentarii/revizuire din meniul redacției
   const nav = $(".adm-nav"); if (!nav) return;
   const pend = Store.list("comments").filter(c => c.status === "pending").length;
-  const a = nav.querySelector('a[href="${ST()}/comentarii"]');
+  const a = nav.querySelector(`a[href="${ST()}/comentarii"]`);
   if (a) { let b = a.querySelector(".badge"); if (pend) { if (!b) { b = document.createElement("span"); b.className = "badge"; a.appendChild(b); } b.textContent = pend; } else if (b) b.remove(); }
 }
 function autoGrow(el) { if (!el) return; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
@@ -2755,7 +2825,7 @@ document.addEventListener("click", async e => {
       if (lastKey === "saved") forceRender();
       break;
     }
-    case "stories": openStories(Number(t.dataset.i || 0)); break;
+    case "stories": openStories(t.dataset.g != null ? Number(t.dataset.g) : -1); break;
     case "trend": trendRange = t.dataset.r; forceRender(); break;
     case "gen-token": { const b = new Uint8Array(32); crypto.getRandomValues(b); $("#ag-token").value = [...b].map(x => x.toString(16).padStart(2, "0")).join(""); break; }
     case "copy-token": { const el = $("#ag-token"); if (!el.value) { toast("Generează întâi cheia.", true); break; } try { await navigator.clipboard.writeText(el.value); } catch (er) { el.select(); document.execCommand("copy"); } toast("Cheie copiată"); break; }
@@ -2831,8 +2901,8 @@ document.addEventListener("click", async e => {
       location.hash = `#/articol/${ED.a.slug}`; break;
     }
     case "ed-untag": ED.a.tags = ED.a.tags.filter(x => x !== t.dataset.tag); ED.dirty = true; t.closest(".chip").remove(); break;
-    case "ed-pick": mediaPicker(t.dataset.kind, m => { edCollect(); ED.a[t.dataset.field] = m.assetId; if (t.dataset.field === "coverId" && m.alt) ED.a.coverAlt = m.alt; ED.dirty = true; forceRender(); }); break;
-    case "ed-unpick": edCollect(); ED.a[t.dataset.field] = ""; ED.dirty = true; forceRender(); break;
+    case "ed-pick": mediaPicker(t.dataset.kind, m => { edCollect(); ED.a[t.dataset.field] = m.assetId; if (t.dataset.field === "coverId") { if (m.alt) ED.a.coverAlt = m.alt; setCoverCredit(m); } ED.dirty = true; forceRender(); }); break;
+    case "ed-unpick": edCollect(); ED.a[t.dataset.field] = ""; if (t.dataset.field === "coverId") setCoverCredit(null); ED.dirty = true; forceRender(); break;
     case "media-edit": mediaEdit(id); break;
     case "cat-edit": catEdit(id); break;
     case "cat-move": {
@@ -2867,8 +2937,17 @@ document.addEventListener("click", async e => {
     }
     case "poll-del": if (await confirmDialog("Sondajul și voturile lui vor fi șterse.", { ok: "Șterge sondajul", danger: true })) await act(() => Store.del("polls", id), "Sondaj șters"); break;
     case "sub-del": if (await confirmDialog("Adresa va fi scoasă din lista de abonați.", { ok: "Dezabonează", danger: true })) await act(() => Store.del("subscribers", id), "Abonat eliminat"); break;
+    case "nl-preview": {
+      try {
+        const r = await fetch("/api/newsletter", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "preview" }) });
+        const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Previzualizarea nu a mers.");
+        openModal(`<h2 style="margin:0 0 4px">Previzualizare</h2><p class="small muted" style="margin:0 0 12px">Subiect: ${esc(j.subject)}</p><iframe title="Newsletterul" sandbox="" style="width:100%;height:70vh;border:2px solid var(--line);border-radius:14px;background:#fff"></iframe><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn" data-close>Închide</button></div>`, { wide: true, onMount: (m, close) => { m.querySelector("iframe").srcdoc = j.html; m.querySelector("[data-close]").addEventListener("click", close); } });
+      } catch (er) { toast(er.message, true); }
+      break;
+    }
+    case "nl-toggle": { const off = !settings().newsletterOff; await act(() => Store.update("settings", "site", { newsletterOff: off }), off ? "Newsletterul e oprit" : "Newsletterul e pornit"); break; }
     case "subs-export": {
-      const csv = "email,data_abonarii\n" + Store.list("subscribers").map(s => `${s.email},${new Date(s.createdAt).toISOString()}`).join("\n");
+      const csv = "email,stare,data_abonarii\n" + Store.list("subscribers").map(s => `${s.email},${s.status === "active" ? "confirmat" : "neconfirmat"},${new Date(s.createdAt).toISOString()}`).join("\n");
       try { const r = await CAP.downloads.save({ filename: `abonati-cred-news-${dayKey(Date.now())}.csv`, data: csv }); if (r.status === "saved") toast("Lista a fost descărcată"); } catch (er) { if (er && er.code !== "cancelled" && er.code !== "declined") toast("Descărcarea nu a pornit.", true); }
       break;
     }
@@ -2897,15 +2976,20 @@ document.addEventListener("submit", async e => {
     const p = new URLSearchParams(parseRoute().q); ["q", "cat"].forEach(k => { const v = String(fd.get(k) || "").trim(); if (v) p.set(k, v); else p.delete(k); });
     const s = p.toString(); location.hash = ST() + "/articole" + (s ? "?" + s : "");
   } else if (kind === "subscribe") {
-    const email = String(fd.get("email")).trim().toLowerCase();
-    if (lsGet("cred-subscribed", "") === email || Store.list("subscribers").some(s => s.email === email)) { toast("Adresa e deja abonată."); return; }
-    const ok = await act(() => Store.set("subscribers", newId("s"), { email, createdAt: Date.now() }));
-    if (ok) { lsSet("cred-subscribed", email); f.outerHTML = `<p style="margin:0;font-weight:600;color:var(--ok)">Gata. Primul e-mail sosește mâine la ora 7.</p>`; }
+    const email = String(fd.get("email")).trim().toLowerCase(), hp = String(fd.get("website") || "");
+    if (Store.mode !== "api" && (lsGet("cred-subscribed", "") === email || Store.list("subscribers").some(s => s.email === email))) { toast("Adresa e deja abonată."); return; }
+    const sid = newId("s");
+    const ok = await act(() => Store.set("subscribers", sid, { email, createdAt: Date.now(), ...(hp ? { website: hp } : {}) }));
+    if (ok) {
+      const doc = Store.get("subscribers", sid) || {}, pending = Store.mode === "api" && doc.status !== "active";
+      lsSet("cred-subscribed", email); lsSet("cred-sub-pending", pending);
+      f.outerHTML = `<p style="margin:0;font-weight:600;color:var(--ok)" role="status">${pending ? "Ți-am trimis un e-mail. Apasă linkul din el ca să confirmi abonarea. Dacă nu-l vezi, uită-te și în Spam sau Promoții." : "Ești abonat. Primul e-mail sosește la 7 dimineața."}</p>`;
+    }
   } else if (kind === "comment") {
-    const name = String(fd.get("name")).trim(), text = String(fd.get("text")).trim();
+    const name = String(fd.get("name")).trim(), text = String(fd.get("text")).trim(), hp = String(fd.get("website") || "");
     if (!name || text.length < 3) { toast("Completează numele și comentariul.", true); return; }
     const cid = newId("k");
-    const ok = await act(() => Store.set("comments", cid, { articleId: f.dataset.article, name, text, status: "pending", createdAt: Date.now() }), "Comentariu trimis. Apare după aprobare.");
+    const ok = await act(() => Store.set("comments", cid, { articleId: f.dataset.article, name, text, status: "pending", createdAt: Date.now(), ...(hp ? { website: hp } : {}) }), "Comentariu trimis. Apare după aprobare.");
     if (ok) { const mine = lsGet("cred-my-comments", []); mine.push(cid); lsSet("cred-my-comments", mine.slice(-50)); lsSet("cred-cname", name); forceRender(); }
   } else if (kind === "login") {
     const email = String(fd.get("email")).trim().toLowerCase(), pass = String(fd.get("pass"));
@@ -2916,17 +3000,24 @@ document.addEventListener("submit", async e => {
   } else if (kind === "agent") {
     const sources = String(fd.get("sources") || "").split("\n").map(l => l.split("|").map(x => x.trim())).filter(x => x.length >= 2 && x[1]).map(([n, u]) => [n, /^https?:\/\//i.test(u) ? u : "https://" + u]).map(([name, url]) => ({ name: name.slice(0, 60) || "Sursă", url: url.slice(0, 400) })).slice(0, 25);
     if (!sources.length) { toast("Adaugă cel puțin o sursă, în formatul: Nume | https://adresa", true); return; }
-    const conf = { enabled: !!fd.get("enabled"), maxPerDay: Math.max(1, Math.min(40, +fd.get("maxPerDay") || 10)), perRun: Math.max(1, Math.min(3, +fd.get("perRun") || 2)), categories: fd.getAll("cat").map(String), extra: String(fd.get("extra") || "").trim().slice(0, 800), sources };
+    const conf = { enabled: !!fd.get("enabled"), photos: !!fd.get("photos"), maxPerDay: Math.max(1, Math.min(40, +fd.get("maxPerDay") || 10)), perRun: Math.max(1, Math.min(3, +fd.get("perRun") || 2)), categories: fd.getAll("cat").map(String), extra: String(fd.get("extra") || "").trim().slice(0, 800), sources };
     await act(() => Store.set("agent", "config", conf), "Setări salvate");
   } else if (kind === "bootstrap") {
     const name = String(fd.get("name") || "").trim(); if (!name) return;
     const btn = f.querySelector("button"); btn.disabled = true; btn.textContent = "Se configurează...";
     const ok = await act(async () => { await Store.apiWrite({ op: "bootstrap", name, demo: !!fd.get("demo") }); await Store.apiLoad(); }, "Gata! Ești administrator.");
     if (ok) forceRender(); else { btn.disabled = false; btn.textContent = "Creează contul de administrator"; }
+  } else if (kind === "nl-test") {
+    const email = String(fd.get("email") || "").trim(); const btn = f.querySelector("button"); if (btn) btn.disabled = true;
+    try {
+      const r = await fetch("/api/newsletter", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "test", email }) });
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Testul nu a plecat.");
+      toast(`Testul a plecat spre ${email}. Verifică și în Spam.`);
+    } catch (er) { toast(er.message, true); } finally { if (btn) btn.disabled = false; }
   } else if (kind === "settings") {
     const path = String(fd.get("studioPath") || "").trim().toLowerCase();
     if (!/^[a-z0-9-]{4,40}$/.test(path)) { toast("Adresa trebuie să aibă 4-40 de litere, cifre sau cratime.", true); return; }
-    const reserved = ["categorie", "articol", "dosar", "cautare", "ultimele", "opinii", "salvate", "tag", "autor", "video", "despre", "contact", "termeni", "confidentialitate", "cookies", "accesibilitate"];
+    const reserved = ["categorie", "articol", "dosar", "cautare", "ultimele", "opinii", "salvate", "tag", "autor", "video", "despre", "contact", "termeni", "confidentialitate", "cookies", "accesibilitate", "newsletter", "pentru-tine"];
     if (reserved.includes(path)) { toast("Adresa asta e folosită deja de site. Alege alta.", true); return; }
     const social = {}; ["instagram", "tiktok", "youtube", "facebook", "x"].forEach(k => { const v = String(fd.get("so_" + k) || "").trim(); if (v) social[k] = v; });
     const changed = path !== studioPath();

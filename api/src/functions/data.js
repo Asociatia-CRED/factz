@@ -19,6 +19,8 @@ app.http("data", {
       // date private
       if (r < 2) { data.subscribers = {}; data.agent = {}; }
       if (r < 1) data.media = {};
+      // codurile secrete din linkurile de confirmare/dezabonare nu pleacă niciodată spre browser
+      data.subscribers = Object.fromEntries(Object.entries(data.subscribers).map(([id, x]) => [id, { ...x, token: undefined }]));
       data.users = Object.fromEntries(Object.entries(all.users).map(([id, u]) => [id, r >= 3 ? { ...u, authIds: undefined, linked: !!(u.authIds || []).length } : { ...u, email: me && me.id === id ? u.email : undefined, authIds: undefined }]));
       const mc = L.mediaContainer();
       return L.json(200, {

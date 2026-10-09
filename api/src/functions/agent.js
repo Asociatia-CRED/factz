@@ -38,6 +38,27 @@ function tokenProblem(req) {
   return null;
 }
 const today = () => L.dayKey(Date.now());
+const PHOTO_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const httpsUrl = u => /^https:\/\/[^\s"<>]+$/i.test(String(u || "")) ? String(u) : "";
+// Salvează fotografia propusă de asistent în Blob Storage și în biblioteca Media. Întoarce câmpurile pentru copertă.
+async function savePhoto(ph, now) {
+  if (!ph || typeof ph !== "object") return null;
+  const type = String(ph.contentType || "").toLowerCase(), ext = PHOTO_TYPES[type];
+  const sourceUrl = httpsUrl(ph.sourceUrl), credit = clip(ph.credit, 300);
+  if (!ext || !sourceUrl || !credit) return null; // fără autor, licență și sursă nu folosim poza
+  const buf = Buffer.from(String(ph.data || ""), "base64");
+  if (buf.length < 2000 || buf.length > 8 * 1024 * 1024) return null;
+  const mc = L.mediaContainer(); if (!mc) return null;
+  await mc.createIfNotExists({ access: "blob" });
+  const name = `${now.toString(36)}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+  await mc.getBlockBlobClient(name).uploadData(buf, { blobHTTPHeaders: { blobContentType: type, blobCacheControl: "public, max-age=31536000, immutable" } });
+  const alt = clip(ph.alt, 200);
+  await L.putDoc("media", "m" + now.toString(36) + crypto.randomBytes(2).toString("hex"), {
+    assetId: name, name: clip(ph.title, 120) || name, kind: "image", type, size: buf.length, folder: "Asistent AI", alt, createdAt: now, by: AGENT_USER,
+    credit, sourceUrl, license: clip(ph.license, 60), licenseUrl: httpsUrl(ph.licenseUrl), author: clip(ph.author, 120),
+  });
+  return { coverId: name, coverAlt: alt, coverCaption: credit, coverSourceUrl: sourceUrl, coverLicenseUrl: httpsUrl(ph.licenseUrl), aiPhoto: true };
+}
 const clip = (s, n) => String(s || "").trim().slice(0, n);
 function cleanBody(html) {
   // doar etichetele permise; restul e eliminat (pagina mai face o sanitizare la afișare)
@@ -110,6 +131,9 @@ app.http("agent", {
           seoTitle: "", seoDesc: "", seoImageId: "", coverId: "", coverAlt: "", coverCaption: "", videoId: "",
           revisions: [], readMin: Math.max(1, Math.round(words / 200)), createdAt: now, updatedAt: now,
         };
+        // fotografia propusă (opțională): dacă ceva nu e în regulă cu ea, ciorna se salvează fără poză
+        try { const cover = await savePhoto(d.photo, now); if (cover) Object.assign(art, cover); }
+        catch (e) { context.error(e); art.aiFlags = [...art.aiFlags, "Fotografia propusă nu a putut fi salvată."].slice(0, 8); }
         await L.putDoc("articles", id, art);
         await L.mutate("agent", "state", cur => { const s = cur || { seen: {}, days: {} }; s.days = s.days || {}; s.days[today()] = (s.days[today()] || 0) + 1; for (const k of Object.keys(s.days)) if (k < L.dayKey(now - 10 * L.DAY)) delete s.days[k]; return s; });
         return L.json(200, { id });

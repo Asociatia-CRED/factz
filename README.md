@@ -172,3 +172,21 @@ Orice fișier schimbat în GitHub se publică automat în 2–4 minute. Când pr
 - **Costuri:** planul Free al Static Web Apps e gratuit, iar Storage account costă câțiva cenți pe lună la volumul unui site de știri la început. Totul intră lejer în grantul Azure.
 - **Date personale:** e-mailurile abonaților și ale redacției nu sunt trimise niciodată către vizitatori. Comentariile apar public doar după aprobare.
 - **Ce mai poate urma:** trimiterea efectivă a newsletterului, notificări push, aplicație instalabilă și adrese de pagină compatibile cu Google (`factz.ro/articol/...`).
+
+---
+
+## Newsletterul de dimineață (din versiunea 5)
+
+Newsletterul pleacă în fiecare zi la 7:00 (ora României), cu știrile publicate în ultimele 24 de ore, doar către abonații care și-au confirmat adresa. Dacă nu s-a publicat nimic, nu se trimite. E-mailurile pleacă prin **Azure Communication Services (Email)**.
+
+Setări în Azure (Static Web App > Environment variables):
+- `ACS_CONNECTION_STRING`: conexiunea resursei Communication Services (Settings > Keys > Connection string);
+- `NEWSLETTER_FROM` (opțional): expeditorul, implicit `DoNotReply@factz.ro`.
+
+În GitHub, fișierul `.github/workflows/newsletter.yml` (copia e în `github-workflow/newsletter.yml`) pornește trimiterea. Folosește aceleași setări ca asistentul (`SITE_URL`, `AGENT_TOKEN`). Se poate porni și manual din Actions > Newsletter factz > Run workflow.
+
+Din studio, la **Abonați**: previzualizare, e-mail de test, oprire/pornire și starea ultimei trimiteri. Dezabonarea șterge adresa definitiv; abonările neconfirmate se șterg după 30 de zile.
+
+## Fotografii propuse de asistent
+
+Asistentul caută fotografii cu licență liberă (CC0, domeniu public, CC BY, CC BY-SA) pe Wikimedia Commons și Openverse și propune una doar dacă arată sigur subiectul. Creditul (autor, sursă, licență) apare sub fotografie, cu link spre sursă, și în Fișa de încredere. Fotografiile din articolele-sursă nu se folosesc niciodată. Se oprește din Studio > Asistent AI.

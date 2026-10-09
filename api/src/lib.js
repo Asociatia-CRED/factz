@@ -1,5 +1,6 @@
 "use strict";
 /* Logica comună: date (Azure Table Storage), fișiere (Blob Storage), identitate și permisiuni. */
+const crypto = require("crypto");
 const { TableClient, odata } = require("@azure/data-tables");
 const { BlobServiceClient } = require("@azure/storage-blob");
 
@@ -43,7 +44,7 @@ async function listEntities(filter) {
 }
 async function readAll() {
   const out = Object.fromEntries(COLS.map(k => [k, {}]));
-  for (const e of await listEntities()) if (out[e.partitionKey]) out[e.partitionKey][e.rowKey] = decode(e);
+  for (const e of await listEntities(odata`PartitionKey ne ${RL}`)) if (out[e.partitionKey]) out[e.partitionKey][e.rowKey] = decode(e);
   return out;
 }
 async function readCol(col) {
@@ -80,6 +81,32 @@ async function mutate(col, id, fn) {
     } catch (e) { if (e.statusCode === 412 || e.statusCode === 409) continue; throw e; }
   }
   throw httpError(503, "Prea multe modificări simultane. Încearcă din nou.", "unavailable");
+}
+
+/* ---------- protecție anti-spam: limite pe conexiune ---------- */
+// Adresa IP nu se salvează: păstrăm doar o amprentă (hash) care se șterge singură după o zi.
+const RL = "rl";
+function clientIp(req) {
+  const h = n => String(req.headers.get(n) || "").split(",")[0].trim();
+  let ip = h("x-azure-clientip") || h("x-client-ip") || h("x-forwarded-for") || "";
+  if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(ip)) ip = ip.replace(/:\d+$/, "");
+  return ip;
+}
+const ipHash = ip => crypto.createHash("sha256").update("factz|" + ip).digest("hex").slice(0, 20);
+// întoarce true dacă cererea se încadrează în limită
+async function rateLimit(req, kind, max, windowMin) {
+  const ip = clientIp(req); if (!ip) return true;
+  const bucket = Math.floor(Date.now() / (windowMin * 60000));
+  let over = false;
+  try {
+    await mutate(RL, `${kind}-${ipHash(ip)}-${windowMin}-${bucket}`, cur => { const d = cur || { n: 0 }; d.n = (d.n || 0) + 1; over = d.n > max; return d; });
+  } catch (e) { return true; } // dacă limitarea nu merge, nu blocăm cititorii
+  if (Math.random() < 0.03) cleanupRl().catch(() => {});
+  return !over;
+}
+async function cleanupRl() {
+  const t = await table(); const old = new Date(Date.now() - DAY);
+  for await (const e of t.listEntities({ queryOptions: { filter: odata`PartitionKey eq ${RL} and Timestamp lt ${old}` } })) { try { await t.deleteEntity(RL, e.rowKey); } catch {} }
 }
 
 /* ---------- Blob Storage ---------- */
@@ -149,7 +176,11 @@ function fail(e, context) {
   return json(500, { error: "Eroare de server. Încearcă din nou peste puțin timp.", code: "unavailable" });
 }
 const isLive = a => a && (a.status === "published" || (a.status === "scheduled" && a.publishAt && a.publishAt <= Date.now()));
-function dayKey(ts) { const d = new Date(ts + 3 * 3600000); return d.toISOString().slice(0, 10); } // ora României (aproximativ)
+// ziua calendaristică în România (ține cont de ora de vară și de iarnă)
+const RO_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest", year: "numeric", month: "2-digit", day: "2-digit" });
+const RO_HOUR = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Bucharest", hour: "2-digit", hourCycle: "h23" });
+function dayKey(ts) { return RO_DAY.format(new Date(ts)); }
+function roHour(ts) { return +RO_HOUR.format(new Date(ts)); }
 function deepMerge(base, patch) {
   const out = { ...(base || {}) };
   for (const [k, v] of Object.entries(patch || {})) {
@@ -158,4 +189,4 @@ function deepMerge(base, patch) {
   return out;
 }
 
-module.exports = { COLS, RANK, REACTS, DAY, ID_RE, authKey, isMasked, resolveMember, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };
+module.exports = { RL, clientIp, rateLimit, roHour, COLS, RANK, REACTS, DAY, ID_RE, authKey, isMasked, resolveMember, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };

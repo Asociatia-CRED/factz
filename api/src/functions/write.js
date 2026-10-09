@@ -3,6 +3,9 @@
 const { app } = require("@azure/functions");
 const L = require("../lib");
 const seed = require("../seed.json");
+const N = require("../newsletter");
+const LINKS_RE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|ru|xyz|top|info|biz|io|shop|online)\b)/gi;
+const tooMany = msg => L.httpError(429, msg, "rate_limited");
 
 // rangul minim pentru scriere (1 jurnalist, 2 editor, 3 administrator)
 const NEED = { agent: 2, articles: 1, liveupdates: 1, media: 1, tags: 1, topics: 2, categories: 2, comments: 2, polls: 2, subscribers: 2, views: 2, reactions: 2, users: 3, settings: 3 };
@@ -57,6 +60,7 @@ app.http("write", {
         return L.json(200, { doc });
       }
       if (op === "react") {
+        if (!(await L.rateLimit(req, "react", 60, 60))) throw tooMany("Prea multe reacții într-un timp scurt. Încearcă mai târziu.");
         const k = body.k, prev = body.prev || null;
         if (!L.REACTS.includes(k) || (prev && !L.REACTS.includes(prev))) throw L.httpError(400, "Reacție invalidă.", "invalid");
         if (!L.isLive(await L.getDoc("articles", id))) throw L.httpError(404, "Articolul nu există.", "not_found");
@@ -73,6 +77,7 @@ app.http("write", {
       }
       if (op === "vote") {
         const opt = String(body.opt || "");
+        if (!(await L.rateLimit(req, "vote-" + id, 10, 60))) throw tooMany("De pe această conexiune s-a votat deja de mai multe ori. Încearcă mai târziu.");
         const doc = await L.mutate("polls", id, cur => {
           if (!cur || !cur.active || !(cur.options || []).some(o => o.id === opt)) throw L.httpError(400, "Sondajul nu mai e activ.", "invalid");
           cur.votes = cur.votes || {}; cur.votes[opt] = (cur.votes[opt] || 0) + 1; return cur;
@@ -83,10 +88,12 @@ app.http("write", {
       /* ---------- primul administrator ---------- */
       if (op === "bootstrap") {
         if (!p) throw L.httpError(401, "Intră mai întâi cu contul Microsoft sau GitHub.", "forbidden");
-        if (Object.keys(users).length) throw L.httpError(403, "Studioul are deja administrator.", "forbidden");
+        // primul cont devine administrator; excepție: contul creat automat din ADMIN_USER_IDS poate face prima configurare
+        const others = Object.keys(users).filter(k => !(me && k === me.id));
+        if (others.length || (Object.keys(users).length && !(me && me.role === "admin"))) throw L.httpError(403, "Studioul are deja administrator.", "forbidden");
         const name = String(body.name || "").trim().slice(0, 80) || p.userDetails;
         const uid = "u" + now.toString(36);
-        await L.putDoc("users", uid, { name, email: L.isMasked(p.userDetails) ? "" : p.userDetails, authIds: p.userId ? [L.authKey(p)] : [], role: "admin", active: true, bio: "", createdAt: now });
+        if (!me) await L.putDoc("users", uid, { name, email: L.isMasked(p.userDetails) ? "" : p.userDetails, authIds: p.userId ? [L.authKey(p)] : [], role: "admin", active: true, bio: "", createdAt: now });
         if (body.demo) {
           const s = shiftSeed(seed);
           const jobs = [];
@@ -116,19 +123,36 @@ app.http("write", {
       if (r === 0) {
         if (op === "set" && col === "comments" && !existing) {
           const d = body.data || {};
+          // capcană pentru roboți: câmpul „website” e invizibil pentru oameni; dacă e completat, ignorăm în tăcere
+          if (d.website) return L.json(200, { doc: { articleId: d.articleId, name: String(d.name || "").slice(0, 60), text: String(d.text || "").slice(0, 1500), status: "pending", createdAt: now } });
           const a = await L.getDoc("articles", String(d.articleId || ""));
           if (!L.isLive(a)) throw L.httpError(400, "Articolul nu acceptă comentarii.", "invalid");
           const name = String(d.name || "").trim().slice(0, 60), text = String(d.text || "").trim().slice(0, 1500);
           if (name.length < 1 || text.length < 3) throw L.httpError(400, "Completează numele și comentariul.", "invalid");
+          if ((text.match(LINKS_RE) || []).length + (name.match(LINKS_RE) || []).length > 2) throw L.httpError(400, "Comentariul are prea multe linkuri. Păstrează cel mult două.", "invalid");
+          if (!(await L.rateLimit(req, "cmt", 4, 10)) || !(await L.rateLimit(req, "cmtday", 25, 1440))) throw tooMany("Ai trimis multe comentarii într-un timp scurt. Încearcă din nou peste câteva minute.");
           const doc = await L.putDoc("comments", id, { articleId: d.articleId, name, text, status: "pending", createdAt: now });
           return L.json(200, { doc });
         }
         if (op === "set" && col === "subscribers" && !existing) {
-          const email = String((body.data || {}).email || "").trim().toLowerCase().slice(0, 200);
+          const d = body.data || {};
+          const email = String(d.email || "").trim().toLowerCase().slice(0, 200);
+          const pending = { email, status: "pending", createdAt: now };
+          if (d.website) return L.json(200, { doc: pending });
           if (!EMAIL_RE.test(email)) throw L.httpError(400, "Adresa de e-mail nu pare validă.", "invalid");
+          if (!(await L.rateLimit(req, "sub", 5, 60))) throw tooMany("Prea multe abonări de pe această conexiune. Încearcă mai târziu.");
           const subs = await L.readCol("subscribers");
-          if (!Object.values(subs).some(s => s.email === email)) await L.putDoc("subscribers", id, { email, createdAt: now });
-          return L.json(200, { doc: { email, createdAt: now } });
+          const found = Object.entries(subs).find(([, s]) => s.email === email);
+          if (found && found[1].status === "active") return L.json(200, { doc: { email, status: "active", createdAt: found[1].createdAt } });
+          // abonare nouă sau neconfirmată: trimitem (din nou) e-mailul de confirmare, cel mult o dată la 10 minute
+          const [sid, sub] = found ? [found[0], { ...found[1] }] : [id, { email, status: "pending", token: N.newToken(), createdAt: now }];
+          if (!sub.token) sub.token = N.newToken();
+          let mailed = false;
+          if (N.configured() && (!sub.confirmSentAt || now - sub.confirmSentAt > 10 * 60000)) {
+            try { await N.send(email, N.confirmEmail({ ...sub, id: sid })); sub.confirmSentAt = now; mailed = true; } catch (e) { context.error(e); }
+          }
+          await L.putDoc("subscribers", sid, { ...sub, status: "pending" });
+          return L.json(200, { doc: { email, status: "pending", createdAt: sub.createdAt, mailed } });
         }
         throw L.httpError(p ? 403 : 401, p ? "Contul tău nu face parte din redacție." : "Intră în studio ca să faci modificări.", "forbidden");
       }

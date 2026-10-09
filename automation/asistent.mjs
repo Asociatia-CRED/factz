@@ -32,6 +32,18 @@ async function get(url, ms = 15000) {
   try { const r = await fetch(url, { headers: { "user-agent": UA, accept: "*/*", "accept-language": "ro,en;q=0.5" }, signal: ctl.signal, redirect: "follow" }); if (!r.ok) throw new Error("HTTP " + r.status); return await r.text(); }
   finally { clearTimeout(t); }
 }
+async function getImage(url, ms = 20000) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { headers: { "user-agent": UA, accept: "image/webp,image/jpeg,image/png,image/*;q=0.8" }, signal: ctl.signal, redirect: "follow" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const type = String(r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!["image/jpeg", "image/png", "image/webp"].includes(type)) throw new Error("tip de fișier nepotrivit: " + type);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length < 2000 || buf.length > 8 * 1024 * 1024) throw new Error("fișier prea mic sau prea mare");
+    return { type, buf };
+  } finally { clearTimeout(t); }
+}
 async function site(method, body) {
   const r = await fetch(`${SITE}/api/agent`, { method, headers: { "x-agent-token": TOKEN, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
@@ -39,6 +51,7 @@ async function site(method, body) {
   return j;
 }
 async function ai(instructions, input, schema, maxTokens, effort = "medium") {
+  // input poate fi text simplu sau o listă de mesaje (text + imagini)
   const r = await fetch(`${AI_BASE}/responses`, {
     method: "POST", headers: { "api-key": AI_KEY, "content-type": "application/json" },
     body: JSON.stringify({ model: MODEL, instructions, input, reasoning: { effort }, max_output_tokens: maxTokens, text: { format: { type: "json_schema", name: "rezultat", strict: true, schema } } }),
@@ -107,6 +120,71 @@ function articleText(html) {
   return og ? decode(og) : "";
 }
 
+/* ---------- fotografii cu licență liberă ---------- */
+// Doar licențe care permit folosirea pe un site de știri, cu menționarea autorului: CC0, domeniu public, CC BY, CC BY-SA.
+// Nu folosim niciodată fotografiile din articolele-sursă: aparțin publicațiilor și agențiilor foto.
+const okLicense = l => { const s = String(l || "").trim(); return /^(cc0|public domain|pd\b|pdm|cc[ -]by(-sa)?\b)/i.test(s) && !/\b(nc|nd)\b|non-?commercial|no ?deriv/i.test(s); };
+const getJson = async url => JSON.parse(await get(url, 15000));
+async function commonsSearch(q) {
+  const u = "https://commons.wikimedia.org/w/api.php?" + new URLSearchParams({ action: "query", format: "json", generator: "search", gsrsearch: `${q} filetype:bitmap`, gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|size|mime|extmetadata", iiurlwidth: "1280" });
+  const j = await getJson(u);
+  return Object.values((j.query || {}).pages || {}).map(p => {
+    const ii = (p.imageinfo || [])[0]; if (!ii) return null;
+    const m = ii.extmetadata || {}, v = k => strip((m[k] || {}).value || "");
+    const thumb = ii.thumburl ? ii.thumburl.replace(/\/\d+px-([^/]+)$/, "/500px-$1") : ii.url;
+    return { provider: "Wikimedia Commons", title: String(p.title || "").replace(/^File:/, "").replace(/\.\w+$/, ""), desc: v("ImageDescription").slice(0, 300),
+      author: v("Artist").slice(0, 100), license: v("LicenseShortName"), licenseUrl: (m.LicenseUrl || {}).value || "", sourceUrl: ii.descriptionurl,
+      url: ii.thumburl || ii.url, thumb, w: ii.width || 0, h: ii.height || 0, mime: ii.mime || "", date: v("DateTimeOriginal").slice(0, 30), nonfree: /true/i.test(v("NonFree")) };
+  }).filter(Boolean);
+}
+async function openverseSearch(q) {
+  const j = await getJson("https://api.openverse.org/v1/images/?" + new URLSearchParams({ q, license: "by,by-sa,cc0,pdm", page_size: "8", mature: "false" }));
+  return (j.results || []).map(r => ({
+    provider: r.source === "wikimedia" ? "Wikimedia Commons" : r.source === "flickr" ? "Flickr" : (r.source || "Openverse"), title: r.title || "", desc: "",
+    author: String(r.creator || "").slice(0, 100), license: r.license === "cc0" ? "CC0" : r.license === "pdm" ? "Public domain" : `CC ${String(r.license || "").toUpperCase()} ${r.license_version || ""}`.trim(),
+    licenseUrl: r.license_url || "", sourceUrl: r.foreign_landing_url || "", url: r.url, thumb: r.thumbnail || r.url, w: r.width || 0, h: r.height || 0, mime: "", date: "", nonfree: false,
+  }));
+}
+const PHOTO = `Ești editorul foto al factz.ro, site de știri verificate. Primești un articol și fotografii candidate cu licență liberă (numerotate, cu imaginea, titlul și descrierea fiecăreia).
+Alege fotografia potrivită pentru coperta articolului sau niciuna (choice = -1). Reguli:
+- Dacă articolul e despre o persoană, alege doar o fotografie în care e SIGUR acea persoană (numele apare în titlu sau descriere). Niciodată altă persoană.
+- Dacă e despre o instituție, o clădire sau un loc, fotografia trebuie să arate exact acea instituție, clădire sau loc.
+- O fotografie generică (de exemplu un spital, o sală de clasă, bancnote) e acceptată doar dacă ilustrează corect tema și nu poate induce în eroare (nu sugerează un eveniment, o persoană sau un loc anume).
+- Respinge: imagini cu sigle sau texte ale altor publicații, grafice, capturi de ecran, imagini violente sau șocante, fotografii foarte vechi pentru subiecte actuale, imagini neclare.
+- Dacă ai cea mai mică îndoială, alege -1. O copertă lipsă e mai bună decât una greșită.
+„alt” = o descriere scurtă, în română, a ce se vede în fotografie (pentru cititorii cu deficiențe de vedere), fără „Imagine cu”.`;
+const photoSchema = obj({ choice: S("integer"), alt: S("string"), why: S("string") });
+async function findPhoto(art, queries) {
+  const seen = new Set(), cands = [];
+  for (const q of (queries || []).map(x => String(x || "").trim()).filter(Boolean).slice(0, 3)) {
+    const found = (await Promise.allSettled([commonsSearch(q), openverseSearch(q)])).flatMap(r => r.status === "fulfilled" ? r.value : []);
+    for (const c of found) {
+      const k = String(c.url || "").replace(/\/\d+px-[^/]+$/, "");
+      if (!c.url || seen.has(k) || c.nonfree || !okLicense(c.license) || !/^https:\/\//.test(c.sourceUrl || "")) continue;
+      if (c.mime && !/jpe?g|png|webp/i.test(c.mime)) continue;
+      if (c.w && c.h && (c.w < 800 || c.w / c.h < 1.05 || c.w / c.h > 2.6)) continue; // copertele sunt orizontale
+      seen.add(k); cands.push(c);
+    }
+    if (cands.length >= 10) break;
+  }
+  if (!cands.length) return null;
+  const list = cands.slice(0, 10);
+  const text = `ARTICOL:\nTITLU: ${art.title}\nREZUMAT: ${art.dek}\n\nFOTOGRAFII CANDIDATE:\n` + list.map((c, n) => `[${n}] ${c.provider} | ${c.title}${c.desc ? " | " + c.desc.slice(0, 200) : ""}${c.date ? " | data: " + c.date : ""}`).join("\n");
+  let pick;
+  try {
+    // cu imaginile atașate (calitate redusă, cost mic), ca modelul să vadă ce alege
+    pick = await ai(PHOTO, [{ role: "user", content: [{ type: "input_text", text }, ...list.map(c => ({ type: "input_image", image_url: c.thumb, detail: "low" }))] }], photoSchema, 1500, "low");
+  } catch (e) {
+    log("Alegerea cu imagini nu a mers, încerc doar cu text:", e.message);
+    pick = await ai(PHOTO + "\nNu vezi imaginile, doar titlurile și descrierile: alege doar dacă descrierea arată clar subiectul.", text, photoSchema, 1500, "low");
+  }
+  const c = list[pick.choice];
+  if (!c) return null;
+  const img = await getImage(c.url);
+  const author = c.author && !/^(unknown|necunoscut|anonymous)$/i.test(c.author) ? c.author : "autor necunoscut";
+  return { data: img.buf.toString("base64"), contentType: img.type, alt: String(pick.alt || "").slice(0, 200), title: c.title, author, license: c.license, licenseUrl: c.licenseUrl, sourceUrl: c.sourceUrl, credit: `Foto: ${author} / ${c.provider}, ${c.license}` };
+}
+
 /* ---------- instrucțiuni ---------- */
 const PICK = `Ești editorul de serviciu al factz.ro, site românesc de știri verificate pentru publicul tânăr.
 Primești titluri recente, fiecare cu publicația din care vine. Sarcina ta:
@@ -153,7 +231,8 @@ REGULI DE FORMĂ:
 11. EVITĂ: „în contextul în care”, „este important de menționat”, „nu în ultimul rând”, „a mai precizat că” repetat, „sursa citată”, adjective emoționale, clickbait.
 12. „tldr”: exact 3 idei scurte (max. 140 de caractere fiecare), fiecare înțeleasă singură.
 13. „checklist”: tot ce editorul trebuie să verifice în surse: TOATE numele și funcțiile oficialilor, toate cifrele, toate condițiile și estimările, orice detaliu din „uncertain”.
-14. Alege categoria doar din lista primită.`;
+14. Alege categoria doar din lista primită.
+15. „photo_queries”: 2–3 căutări scurte pentru o fotografie de copertă cu licență liberă: întâi numele exact al persoanei principale sau al instituției/locului (de ex. „Ilie Bolojan”, „Palatul Parlamentului”), apoi o căutare generică în engleză pentru temă (de ex. „hospital corridor”, „euro banknotes”).`;
 const VERIFY = `Ești editorul de verificare al factz.ro. Primești o ciornă și sursele ei. Compară FIECARE afirmație din ciornă cu sursele.
 - Elimină sau corectează orice afirmație care nu e susținută de surse (nume, funcții, cifre, date, locuri, cauze, citate).
 - Verifică titlul: e precis, atribuie corect, nu generalizează?
@@ -169,7 +248,7 @@ const analyzeSchema = obj({
   key_facts: arr(obj({ fact: S("string"), ids: arr(S("integer")) })), conflicts: arr(S("string")), uncertain: arr(S("string")),
 });
 const draftProps = { title: S("string"), dek: S("string"), tldr: arr(S("string")), body: S("string"), checklist: arr(S("string")) };
-const writeSchema = obj({ ...draftProps, category_id: S("string"), tags: arr(S("string")) });
+const writeSchema = obj({ ...draftProps, category_id: S("string"), tags: arr(S("string")), photo_queries: arr(S("string")) });
 const verifySchema = obj({ ...draftProps, issues: arr(S("string")) });
 
 /* ---------- rularea ---------- */
@@ -250,6 +329,14 @@ async function main() {
         kind, outlets: outlets.size, category_id: d.category_id, tags: d.tags,
         sources: [...main.map(i => ({ name: i.source, title: i.title, url: i.link })), ...context.map(i => ({ name: i.source + " (context)", title: i.title, url: i.link }))],
       };
+      // 7) fotografia de copertă (opțional): doar cu licență liberă, aleasă cu grijă; editorul o aprobă
+      if (config.photos !== false) {
+        try {
+          const ph = await findPhoto(draft, d.photo_queries);
+          if (ph) { draft.photo = ph; draft.checklist = [...draft.checklist.slice(0, 9), `Fotografia de copertă e propusă de asistent (${ph.credit}). Verifică dacă arată exact subiectul; o poți schimba sau scoate.`]; log("Fotografie propusă:", ph.credit); }
+          else log("Nicio fotografie potrivită; ciorna rămâne cu coperta generată.");
+        } catch (e) { errors.push(`Fotografie pentru „${draft.title.slice(0, 50)}”: ${e.message}`); log("EROARE fotografie:", e.message); }
+      }
       const r = await site("POST", { action: "draft", draft });
       titles.push(`${draft.title} [${kind}, ${outlets.size} publicații]`); log("Ciornă creată:", draft.title, `(${kind}, ${outlets.size} publicații)`, r.id);
       await site("POST", { action: "seen", keys: t.group.map(i => hash(i.link)) });
