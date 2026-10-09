@@ -1,0 +1,28 @@
+name: Newsletter factz
+
+on:
+  schedule:
+    # la 7:00 ora României: 04:00 UTC vara, 05:00 UTC iarna (site-ul trimite o singură dată pe zi)
+    - cron: "0 4,5 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Trimite acum, chiar dacă e înainte de ora 7"
+        type: boolean
+        default: false
+
+jobs:
+  trimite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Trimite newsletterul
+        run: node automation/newsletter.mjs
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          FORCE: ${{ inputs.force }}
