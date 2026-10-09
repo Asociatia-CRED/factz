@@ -4,6 +4,10 @@
   },
   "routes": [
     {
+      "route": "/articol/*",
+      "rewrite": "/api/page"
+    },
+    {
       "route": "/automation/*",
       "statusCode": 404
     },

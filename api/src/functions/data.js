@@ -27,6 +27,7 @@ app.http("data", {
         data,
         mediaBase: mc ? mc.url : "",
         bootstrapNeeded: Object.keys(all.users).length === 0,
+        pushKey: String(process.env.VAPID_PUBLIC_KEY || "").trim(),
         me: { principal: p ? { userDetails: p.userDetails, identityProvider: p.identityProvider, userId: p.userId } : null, user: me ? { ...me, authIds: undefined } : null },
       });
     } catch (e) { return L.fail(e, context); }

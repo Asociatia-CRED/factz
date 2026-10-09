@@ -11,6 +11,7 @@
     "@azure/communication-email": "^1.0.0",
     "@azure/data-tables": "^13.3.2",
     "@azure/functions": "^4.5.1",
-    "@azure/storage-blob": "^12.24.0"
+    "@azure/storage-blob": "^12.24.0",
+    "web-push": "^3.6.7"
   }
 }

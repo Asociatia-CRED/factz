@@ -202,3 +202,17 @@ Paginile au adrese reale, bune pentru Google: `factz.ro/articol/...`, `factz.ro/
 ## Aplicație pe telefon
 
 Cititorii pot adăuga factz.ro pe ecranul telefonului (Safari: Partajează > Adaugă pe ecranul principal; Chrome: Instalează aplicația). Iconițele sunt `icon-*.png` și `apple-touch-icon.png`, descrise în `manifest.webmanifest`.
+
+## Previzualizări la distribuire și Google (din versiunea 9)
+
+Adresele `/articol/...` trec printr-o funcție (`api/src/functions/page.js`) care scrie în pagină titlul, rezumatul și coperta articolului, plus datele de știre pentru Google (NewsArticle). Așa apar previzualizări corecte pe WhatsApp, Facebook, Instagram și X. Articolele fără copertă folosesc `og-default.png`. Fluxul RSS e la `factz.ro/api/rss`.
+
+Dacă vreodată paginile de articol nu se mai deschid, regula se scoate din `staticwebapp.config.json` (blocul cu `"route": "/articol/*"`), iar site-ul revine la funcționarea de dinainte.
+
+## Rescrie cu AI
+
+În editor, butonul **Rescrie cu AI** aplică o indicație a editorului pe ciornă, fără fapte noi. Cere în Azure (Static Web App > Environment variables) aceleași trei setări ca asistentul: `AI_ENDPOINT`, `AI_KEY`, `AI_DEPLOYMENT`.
+
+## Alerte „Ultima oră” (notificări)
+
+Cititorii le pornesc din subsolul site-ului (pe iPhone, doar după ce adaugă factz.ro pe ecranul principal). Editorii le trimit din editor, cu **Trimite notificare**, doar pentru articole publicate. Cheile se generează din Studio > Setări și se pun în Azure ca `VAPID_PUBLIC_KEY` și `VAPID_PRIVATE_KEY`. Fișierul `sw.js` primește notificările și nu păstrează nimic în cache.

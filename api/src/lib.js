@@ -44,7 +44,7 @@ async function listEntities(filter) {
 }
 async function readAll() {
   const out = Object.fromEntries(COLS.map(k => [k, {}]));
-  for (const e of await listEntities(odata`PartitionKey ne ${RL}`)) if (out[e.partitionKey]) out[e.partitionKey][e.rowKey] = decode(e);
+  for (const e of await listEntities(odata`PartitionKey ne ${RL} and PartitionKey ne ${PUSH}`)) if (out[e.partitionKey]) out[e.partitionKey][e.rowKey] = decode(e);
   return out;
 }
 async function readCol(col) {
@@ -85,7 +85,7 @@ async function mutate(col, id, fn) {
 
 /* ---------- protecție anti-spam: limite pe conexiune ---------- */
 // Adresa IP nu se salvează: păstrăm doar o amprentă (hash) care se șterge singură după o zi.
-const RL = "rl";
+const RL = "rl", PUSH = "push"; // partiții interne, care nu pleacă niciodată spre browser
 function clientIp(req) {
   const h = n => String(req.headers.get(n) || "").split(",")[0].trim();
   let ip = h("x-azure-clientip") || h("x-client-ip") || h("x-forwarded-for") || "";
@@ -189,4 +189,4 @@ function deepMerge(base, patch) {
   return out;
 }
 
-module.exports = { RL, clientIp, rateLimit, roHour, COLS, RANK, REACTS, DAY, ID_RE, authKey, isMasked, resolveMember, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };
+module.exports = { PUSH, RL, clientIp, rateLimit, roHour, COLS, RANK, REACTS, DAY, ID_RE, authKey, isMasked, resolveMember, readAll, readCol, getDoc, putDoc, delDoc, mutate, mediaContainer, principal, findMember, rank, httpError, json, fail, isLive, dayKey, deepMerge };
